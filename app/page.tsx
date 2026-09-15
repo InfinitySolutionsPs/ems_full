@@ -202,11 +202,21 @@ export default function HomePage() {
         fetch(`/api/dashboard?${query}`),
         fetch(`/api/incidents?${query}`),
       ]);
-      if (!d.ok || !r.ok) throw new Error();
-      setDashboard(await d.json());
-      setIncidents((await r.json()).incidents);
+      if (r.ok) {
+        const records = await r.json();
+        setIncidents(records.incidents || []);
+      } else {
+        const recordsError = await r.json().catch(() => ({}));
+        toast.error(recordsError.error || "تعذر تحميل سجل البلاغات. حاولي مرة أخرى.");
+      }
+      if (d.ok) {
+        setDashboard(await d.json());
+      } else {
+        const dashboardError = await d.json().catch(() => ({}));
+        toast.error(dashboardError.error || "تعذر تحميل لوحة المؤشرات. حاولي مرة أخرى.");
+      }
     } catch {
-      toast.error("تعذر تحميل البيانات. حاولي مرة أخرى.");
+      toast.error("تعذر الاتصال بالنظام. حاولي مرة أخرى.");
     } finally {
       setLoading(false);
     }
