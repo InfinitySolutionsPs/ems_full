@@ -17,12 +17,12 @@ export async function GET(request: NextRequest) {
   if (category !== "all") { where += " AND category = ?"; args.push(category); }
   if (access.profile?.role==="station_user") { where += " AND station = ?"; args.push(access.profile.station); }
   const queries = [
-    env.DB.prepare(`SELECT COUNT(*) total, COUNT(DISTINCT CASE WHEN beneficiary_name IS NOT NULL AND beneficiary_name != '' THEN id END) beneficiaries, ROUND(AVG(NULLIF(response_minutes,0)),1) "avgResponse", ROUND(SUM(distance_km)::numeric,1) distance, SUM(CASE WHEN urgency='Red' OR urgency='حمراء' THEN 1 ELSE 0 END) "redCases" FROM incidents WHERE ${where}`).bind(...args),
+    env.DB.prepare(`SELECT COUNT(*) total, COUNT(DISTINCT CASE WHEN beneficiary_name IS NOT NULL AND beneficiary_name != '' THEN id END) beneficiaries, ROUND(AVG(NULLIF(response_minutes,0))::numeric,1) "avgResponse", ROUND(SUM(distance_km)::numeric,1) distance, SUM(CASE WHEN urgency='Red' OR urgency='حمراء' THEN 1 ELSE 0 END) "redCases" FROM incidents WHERE ${where}`).bind(...args),
     env.DB.prepare(`SELECT pickup_governorate name, COUNT(*) value FROM incidents WHERE ${where} GROUP BY pickup_governorate ORDER BY value DESC`).bind(...args),
     env.DB.prepare(`SELECT category name, COUNT(*) value FROM incidents WHERE ${where} GROUP BY category ORDER BY value DESC`).bind(...args),
     env.DB.prepare(`SELECT substr(call_date,1,7) month, COUNT(*) value FROM incidents WHERE ${where} GROUP BY month ORDER BY month`).bind(...args),
     env.DB.prepare(`SELECT case_type name, COUNT(*) value FROM incidents WHERE ${where} GROUP BY case_type ORDER BY value DESC LIMIT 7`).bind(...args),
-    env.DB.prepare(`SELECT station name, COUNT(*) incidents, ROUND(SUM(distance_km)::numeric,1) distance, ROUND(AVG(NULLIF(response_minutes,0)),1) response FROM incidents WHERE ${where} GROUP BY station ORDER BY incidents DESC`).bind(...args),
+    env.DB.prepare(`SELECT station name, COUNT(*) incidents, ROUND(SUM(distance_km)::numeric,1) distance, ROUND(AVG(NULLIF(response_minutes,0))::numeric,1) response FROM incidents WHERE ${where} GROUP BY station ORDER BY incidents DESC`).bind(...args),
   ];
   const [summary, governorates, categories, timeline, cases, stations] = await env.DB.batch(queries);
   return NextResponse.json({ summary: summary.results[0] || {}, governorates: governorates.results, categories: categories.results, timeline: timeline.results, cases: cases.results, stations: stations.results });
