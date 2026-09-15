@@ -1,0 +1,5 @@
+import { env } from "@/lib/server-env";
+import { NextRequest,NextResponse } from "next/server";
+import { getAccess } from "@/lib/access";
+export async function GET(request:NextRequest){const a=await getAccess(request);if(!a.profile)return NextResponse.json({error:"يرجى تسجيل الدخول"},{status:401});const result=await env.DB.prepare("SELECT * FROM notifications WHERE recipient IS NULL OR recipient=? ORDER BY created_at DESC LIMIT 30").bind(a.email).all();return NextResponse.json({notifications:result.results,unread:result.results.filter((x:any)=>!x.is_read).length});}
+export async function PATCH(request:NextRequest){const a=await getAccess(request);if(!a.profile)return NextResponse.json({error:"يرجى تسجيل الدخول"},{status:401});const b=await request.json() as {id?:number;all?:boolean};if(b.all)await env.DB.prepare("UPDATE notifications SET is_read=1 WHERE recipient IS NULL OR recipient=?").bind(a.email).run();else if(b.id)await env.DB.prepare("UPDATE notifications SET is_read=1 WHERE id=? AND (recipient IS NULL OR recipient=?)").bind(b.id,a.email).run();return NextResponse.json({ok:true});}

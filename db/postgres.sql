@@ -1,0 +1,77 @@
+CREATE TABLE IF NOT EXISTS stations (id BIGSERIAL PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, governorate TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS vehicles (id BIGSERIAL PRIMARY KEY, plate_number TEXT NOT NULL UNIQUE, station_id BIGINT REFERENCES stations(id), manufacturer TEXT, model TEXT, production_year INTEGER, fuel_type TEXT, ambulance_type TEXT, active INTEGER NOT NULL DEFAULT 1, service_status TEXT NOT NULL DEFAULT 'active', out_of_service_reason TEXT, work_location TEXT, fleet_source_row INTEGER);
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS chassis_number TEXT;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS mileage_km DOUBLE PRECISION;
+ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS usage_status TEXT;
+CREATE TABLE IF NOT EXISTS staff (id BIGSERIAL PRIMARY KEY, full_name TEXT NOT NULL, station_id BIGINT REFERENCES stations(id), qualification TEXT, cadre_type TEXT NOT NULL DEFAULT 'كادر', job_title TEXT, detail TEXT, active INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS user_profiles (id BIGSERIAL PRIMARY KEY, external_user_id TEXT UNIQUE, username TEXT, email TEXT, full_name TEXT, password_hash TEXT, role TEXT NOT NULL DEFAULT 'viewer', permissions TEXT NOT NULL DEFAULT '[]', station TEXT, active INTEGER NOT NULL DEFAULT 1, last_login_at TIMESTAMPTZ);
+ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS username TEXT;
+ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS password_hash TEXT;
+ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS permissions TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+ALTER TABLE user_profiles ALTER COLUMN external_user_id DROP NOT NULL;
+CREATE TABLE IF NOT EXISTS auth_sessions (id TEXT PRIMARY KEY, user_id BIGINT NOT NULL REFERENCES user_profiles(id) ON DELETE CASCADE, expires_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, last_seen_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS incidents (
+ id BIGSERIAL PRIMARY KEY, incident_number TEXT NOT NULL UNIQUE, incident_code TEXT, beneficiary_name TEXT, gender TEXT NOT NULL, contact TEXT, age INTEGER, urgency TEXT NOT NULL, category TEXT NOT NULL, case_type TEXT NOT NULL,
+ pickup_type TEXT, pickup_location TEXT, pickup_governorate TEXT NOT NULL, pickup_municipality TEXT, pickup_neighborhood TEXT, dropoff_type TEXT, dropoff_location TEXT, shift TEXT NOT NULL, station TEXT NOT NULL,
+ vehicle TEXT, vehicle_id BIGINT REFERENCES vehicles(id), km_start DOUBLE PRECISION, km_end DOUBLE PRECISION, distance_km DOUBLE PRECISION NOT NULL DEFAULT 0, call_date TEXT NOT NULL, call_time TEXT NOT NULL,
+ dispatch_date TEXT, dispatch_time TEXT, on_scene_date TEXT, arrival_time TEXT, hospital_date TEXT, hospital_time TEXT, available_date TEXT, clear_time TEXT, response_minutes INTEGER NOT NULL DEFAULT 0, service_minutes INTEGER NOT NULL DEFAULT 0,
+ crew TEXT, dispatcher_primary TEXT, dispatcher_secondary TEXT, emt_driver TEXT, emt_lead TEXT, emt_assist TEXT, interventions TEXT, chief_complaint TEXT,
+ cancelled INTEGER NOT NULL DEFAULT 0, patient_deceased INTEGER NOT NULL DEFAULT 0, conflict_related INTEGER NOT NULL DEFAULT 0, oxygen INTEGER NOT NULL DEFAULT 0, bvm INTEGER NOT NULL DEFAULT 0, airway INTEGER NOT NULL DEFAULT 0,
+ cpr INTEGER NOT NULL DEFAULT 0, aed INTEGER NOT NULL DEFAULT 0, drugs INTEGER NOT NULL DEFAULT 0, wound_care INTEGER NOT NULL DEFAULT 0, tourniquet INTEGER NOT NULL DEFAULT 0, immobilization INTEGER NOT NULL DEFAULT 0,
+ cervical_collar INTEGER NOT NULL DEFAULT 0, glucose_check INTEGER NOT NULL DEFAULT 0, splinting INTEGER NOT NULL DEFAULT 0, delivery INTEGER NOT NULL DEFAULT 0,
+ source_import_key TEXT UNIQUE, source_incident_number TEXT, source_incident_code TEXT, import_batch TEXT, data_quality_status TEXT NOT NULL DEFAULT 'ok', data_quality_notes TEXT,
+ fuel_liters DOUBLE PRECISION NOT NULL DEFAULT 0, notes TEXT, approval_status TEXT NOT NULL DEFAULT 'approved', approved_by TEXT, approved_at TIMESTAMPTZ, rejection_reason TEXT, created_by TEXT,
+ created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS operational_assignments (id BIGSERIAL PRIMARY KEY, work_date TEXT NOT NULL, staff_id BIGINT NOT NULL REFERENCES staff(id), station_id BIGINT NOT NULL REFERENCES stations(id), shift TEXT NOT NULL, duty_type TEXT NOT NULL DEFAULT 'دوام مركز', vehicle_id BIGINT REFERENCES vehicles(id), work_location TEXT, attendance_status TEXT NOT NULL DEFAULT 'حاضر', notes TEXT, created_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS coordinations (id BIGSERIAL PRIMARY KEY, source_key TEXT UNIQUE, sequence_number INTEGER, coordination_date TEXT NOT NULL, coordinating_agency TEXT NOT NULL, vehicle_count INTEGER NOT NULL DEFAULT 0, coordination_type TEXT NOT NULL, result_description TEXT, ambulance_patients INTEGER NOT NULL DEFAULT 0, ambulance_companions INTEGER NOT NULL DEFAULT 0, bus_patients INTEGER NOT NULL DEFAULT 0, coordination_status TEXT NOT NULL DEFAULT 'نجح', participating_vehicles TEXT, notes_patients INTEGER NOT NULL DEFAULT 0, notes_companions INTEGER NOT NULL DEFAULT 0, notes_total INTEGER NOT NULL DEFAULT 0, notes TEXT, created_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS fuel_fillings (id BIGSERIAL PRIMARY KEY, vehicle_id BIGINT NOT NULL REFERENCES vehicles(id), incident_id BIGINT REFERENCES incidents(id), filled_at TEXT NOT NULL, liters DOUBLE PRECISION NOT NULL, fuel_type TEXT NOT NULL, odometer_km DOUBLE PRECISION, driver_staff_id BIGINT REFERENCES staff(id), driver_name TEXT, filled_by_staff_id BIGINT REFERENCES staff(id), filled_by_name TEXT NOT NULL, source_name TEXT, voucher_number TEXT, notes TEXT, created_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS vehicle_movements (id BIGSERIAL PRIMARY KEY, vehicle_id BIGINT NOT NULL REFERENCES vehicles(id), incident_id BIGINT REFERENCES incidents(id), driver_staff_id BIGINT REFERENCES staff(id), driver_name TEXT, departed_at TEXT NOT NULL, returned_at TEXT, km_start DOUBLE PRECISION NOT NULL, km_end DOUBLE PRECISION, destination TEXT, notes TEXT, created_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS vehicle_maintenance (id BIGSERIAL PRIMARY KEY, vehicle_id BIGINT NOT NULL REFERENCES vehicles(id), station_id BIGINT NOT NULL REFERENCES stations(id), request_date TEXT NOT NULL, department TEXT NOT NULL, odometer_km DOUBLE PRECISION NOT NULL, requested_repair TEXT NOT NULL, failure_cause TEXT, driver_name TEXT NOT NULL, center_manager_name TEXT, circle_manager_name TEXT, attachment_key TEXT NOT NULL, attachment_name TEXT NOT NULL, attachment_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', maintenance_recommendation TEXT, manager_recommendation TEXT, finance_recommendation TEXT, administrative_recommendation TEXT, performed_work TEXT, received_at TEXT, received_by TEXT, created_by TEXT NOT NULL, closed_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS audit_logs (id BIGSERIAL PRIMARY KEY, actor TEXT, action TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT, details TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS notifications (id BIGSERIAL PRIMARY KEY, recipient TEXT, title TEXT NOT NULL, message TEXT NOT NULL, type TEXT NOT NULL DEFAULT 'info', entity_type TEXT, entity_id TEXT, is_read INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value TEXT, label TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'general', updated_by TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+CREATE INDEX IF NOT EXISTS idx_maintenance_request_date_station_vehicle ON vehicle_maintenance(request_date,station_id,vehicle_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_maintenance_one_open_vehicle ON vehicle_maintenance(vehicle_id) WHERE status='open';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_email ON user_profiles(lower(email)) WHERE email IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_username ON user_profiles(lower(username)) WHERE username IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_auth_sessions_expiry ON auth_sessions(expires_at);
+
+-- Merge duplicate employee names safely. The oldest record is retained and all
+-- operational, movement and fuel references are redirected before deletion.
+WITH duplicates AS (
+  SELECT id AS remove_id, MIN(id) OVER (PARTITION BY lower(regexp_replace(trim(full_name), '\s+', ' ', 'g'))) AS keep_id
+  FROM staff
+)
+UPDATE operational_assignments target SET staff_id = duplicates.keep_id
+FROM duplicates WHERE target.staff_id = duplicates.remove_id AND duplicates.remove_id <> duplicates.keep_id;
+
+WITH duplicates AS (
+  SELECT id AS remove_id, MIN(id) OVER (PARTITION BY lower(regexp_replace(trim(full_name), '\s+', ' ', 'g'))) AS keep_id
+  FROM staff
+)
+UPDATE vehicle_movements target SET driver_staff_id = duplicates.keep_id
+FROM duplicates WHERE target.driver_staff_id = duplicates.remove_id AND duplicates.remove_id <> duplicates.keep_id;
+
+WITH duplicates AS (
+  SELECT id AS remove_id, MIN(id) OVER (PARTITION BY lower(regexp_replace(trim(full_name), '\s+', ' ', 'g'))) AS keep_id
+  FROM staff
+)
+UPDATE fuel_fillings target SET driver_staff_id = duplicates.keep_id
+FROM duplicates WHERE target.driver_staff_id = duplicates.remove_id AND duplicates.remove_id <> duplicates.keep_id;
+
+WITH duplicates AS (
+  SELECT id AS remove_id, MIN(id) OVER (PARTITION BY lower(regexp_replace(trim(full_name), '\s+', ' ', 'g'))) AS keep_id
+  FROM staff
+)
+UPDATE fuel_fillings target SET filled_by_staff_id = duplicates.keep_id
+FROM duplicates WHERE target.filled_by_staff_id = duplicates.remove_id AND duplicates.remove_id <> duplicates.keep_id;
+
+DELETE FROM staff duplicate
+USING staff original
+WHERE duplicate.id > original.id
+  AND lower(regexp_replace(trim(duplicate.full_name), '\s+', ' ', 'g')) = lower(regexp_replace(trim(original.full_name), '\s+', ' ', 'g'));
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_staff_normalized_name
+ON staff (lower(regexp_replace(trim(full_name), '\s+', ' ', 'g')));

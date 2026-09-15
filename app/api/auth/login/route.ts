@@ -1,0 +1,4 @@
+import { NextRequest,NextResponse } from "next/server";
+import { createSession,setSessionCookie,verifyPassword } from "@/lib/auth";
+import { env } from "@/lib/server-env";
+export async function POST(request:NextRequest){const b=await request.json() as Record<string,string>;const login=(b.username||"").trim().toLowerCase();const user=await env.DB.prepare("SELECT id,password_hash,active FROM user_profiles WHERE lower(username)=? OR lower(email)=? LIMIT 1").bind(login,login).first<{id:number,password_hash:string|null,active:number}>();if(!user?.active||!user.password_hash||!verifyPassword(b.password||"",user.password_hash))return NextResponse.json({error:"اسم المستخدم أو كلمة المرور غير صحيحة"},{status:401});await env.DB.prepare("UPDATE user_profiles SET last_login_at=CURRENT_TIMESTAMP WHERE id=?").bind(user.id).run();const token=await createSession(user.id);const response=NextResponse.json({ok:true});setSessionCookie(response,token);return response;}
