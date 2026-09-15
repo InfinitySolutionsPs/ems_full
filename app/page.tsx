@@ -207,16 +207,16 @@ export default function HomePage() {
         setIncidents(records.incidents || []);
       } else {
         const recordsError = await r.json().catch(() => ({}));
-        toast.error(recordsError.error || "تعذر تحميل سجل البلاغات. حاولي مرة أخرى.");
+        toast.error(recordsError.error || "تعذر تحميل سجل البلاغات. حاول مرة أخرى.");
       }
       if (d.ok) {
         setDashboard(await d.json());
       } else {
         const dashboardError = await d.json().catch(() => ({}));
-        toast.error(dashboardError.error || "تعذر تحميل لوحة المؤشرات. حاولي مرة أخرى.");
+        toast.error(dashboardError.error || "تعذر تحميل لوحة المؤشرات. حاول مرة أخرى.");
       }
     } catch {
-      toast.error("تعذر الاتصال بالنظام. حاولي مرة أخرى.");
+      toast.error("تعذر الاتصال بالنظام. حاول مرة أخرى.");
     } finally {
       setLoading(false);
     }
@@ -496,7 +496,7 @@ function Filters({
         </div>
         <div>
           <b>فلاتر العرض</b>
-          <span>حددي نطاق البيانات المطلوبة</span>
+          <span>حدد نطاق البيانات المطلوبة</span>
         </div>
       </div>
       <div className="filters-grid">
@@ -591,18 +591,24 @@ function DashboardView({
   onGovernorate: (n: string) => void;
 }) {
   const s = dashboard.summary || {};
+  const total = Number(s.total || 0);
+  const topGovernorate = dashboard.governorates[0];
   const cards = [
     {
       label: "إجمالي البلاغات",
       value: s.total || 0,
       sub: "بلاغ خلال الفترة",
       icon: Siren,
+      tone: "red",
+      progress: 100,
     },
     {
       label: "المستفيدون",
       value: s.beneficiaries || 0,
       sub: "مستفيد مسجل",
       icon: UsersRound,
+      tone: "blue",
+      progress: total ? Math.min(100, (Number(s.beneficiaries || 0) / total) * 100) : 0,
     },
     {
       label: "متوسط الاستجابة",
@@ -610,6 +616,8 @@ function DashboardView({
       unit: "دقيقة",
       sub: "من التحريك حتى الوصول",
       icon: Clock3,
+      tone: "amber",
+      progress: Math.max(8, Math.min(100, 100 - Number(s.avgResponse || 0) * 3)),
     },
     {
       label: "المسافة المقطوعة",
@@ -617,26 +625,56 @@ function DashboardView({
       unit: "كم",
       sub: `${s.redCases || 0} حالة حمراء`,
       icon: Route,
+      tone: "green",
+      progress: total ? Math.min(100, (Number(s.redCases || 0) / total) * 100) : 0,
+    },
+    {
+      label: "الحالات الحمراء",
+      value: s.redCases || 0,
+      sub: total ? `${Math.round((Number(s.redCases || 0) / total) * 100)}% من البلاغات` : "لا توجد بلاغات في الفترة",
+      icon: AlertTriangle,
+      tone: "purple",
+      progress: total ? Math.min(100, (Number(s.redCases || 0) / total) * 100) : 0,
+    },
+    {
+      label: "التغطية الجغرافية",
+      value: dashboard.governorates.length,
+      unit: "محافظة",
+      sub: topGovernorate ? `الأعلى: ${topGovernorate.name}` : "لا توجد بيانات في الفترة",
+      icon: MapPin,
+      tone: "navy",
+      progress: Math.min(100, dashboard.governorates.length * 20),
     },
   ];
   return (
     <div className="page-stack">
       <Filters {...{ filters, setFilters, refresh }} />
+      <section className="dashboard-overview panel">
+        <div>
+          <span className="dashboard-live"><i /> بيانات تشغيلية معتمدة</span>
+          <h2>ملخص أداء الإسعاف والطوارئ</h2>
+          <p>تتحدث جميع المؤشرات والرسوم مباشرة عند تغيير الفترة أو المحافظة أو التصنيف.</p>
+        </div>
+        <div className="dashboard-period">
+          <small>الفترة المعروضة</small>
+          <b>{filters.from} — {filters.to}</b>
+        </div>
+      </section>
       <section className="kpi-grid">
         {cards.map((c, i) => (
           <article
-            className={`kpi ${loading ? "loading" : ""}`}
+            className={`kpi kpi-${c.tone} ${loading ? "loading" : ""}`}
             key={c.label}
             style={{ animationDelay: `${i * 90}ms` }}
           >
-            <div className="kpi-disc">
+            <div className="kpi-icon">
               <c.icon />
-              <strong>{c.value}</strong>
-              {c.unit && <small>{c.unit}</small>}
             </div>
-            <div>
+            <div className="kpi-copy">
               <span>{c.label}</span>
+              <div className="kpi-value"><strong>{c.value}</strong>{c.unit && <small>{c.unit}</small>}</div>
               <p>{c.sub}</p>
+              <span className="kpi-progress" aria-hidden="true"><i style={{width: `${c.progress}%`}} /></span>
             </div>
           </article>
         ))}
@@ -715,7 +753,7 @@ function DashboardView({
           <PanelTitle
             icon={MapPin}
             title="البلاغات حسب المحافظة"
-            subtitle="اضغطي على العمود لتصفية اللوحة"
+            subtitle="اضغط على العمود لتصفية اللوحة"
           />
           <div className="chart-body">
             <ResponsiveContainer width="100%" height={270}>
@@ -809,7 +847,7 @@ function IncidentForm({
         required={required}
         onChange={(e) => setField(name, e.target.value)}
       >
-        <option value="">اختاري...</option>
+        <option value="">اختر...</option>
         {options.map((x) => (
           <option key={x} value={x}>
             {labels?.[x] || x}
@@ -1053,7 +1091,7 @@ function Records({
         <div className="search">
           <Search />
           <input
-            placeholder="ابحثي برقم البلاغ أو المستفيد أو المحطة"
+            placeholder="ابحث برقم البلاغ أو المستفيد أو المحطة"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
@@ -1063,7 +1101,7 @@ function Records({
         </button>
       </section>
       <section className="record-filter-bar panel" dir="rtl">
-        <div className="filter-title"><span className="filter-mark"><SlidersHorizontal /></span><span><b>فلاتر سجل البلاغات</b><small>حددي الفترة والتصنيف ونطاق العمل</small></span><span className="filter-count">{rows.length} نتيجة</span></div>
+        <div className="filter-title"><span className="filter-mark"><SlidersHorizontal /></span><span><b>فلاتر سجل البلاغات</b><small>حدد الفترة والتصنيف ونطاق العمل</small></span><span className="filter-count">{rows.length} نتيجة</span></div>
         <div className="record-filter-fields">
           <label>من تاريخ<input type="date" value={filters.from} max={filters.to} onChange={e=>setFilters(v=>({...v,from:e.target.value}))}/></label>
           <label>إلى تاريخ<input type="date" value={filters.to} min={filters.from} onChange={e=>setFilters(v=>({...v,to:e.target.value}))}/></label>
@@ -1453,7 +1491,7 @@ function Empty() {
     <div className="empty">
       <ClipboardList />
       <b>لا توجد بيانات ضمن النطاق الحالي</b>
-      <span>أضيفي بلاغًا جديدًا أو غيّري الفلاتر</span>
+      <span>أضف بلاغًا جديدًا أو غيّر الفلاتر</span>
     </div>
   );
 }
@@ -1522,7 +1560,7 @@ function Approvals({
   const decide = async (id: number, decision: "approved" | "rejected") => {
     let reason = "";
     if (decision === "rejected") {
-      reason = prompt("اكتبي سبب الرفض أو الملاحظة المطلوبة") || "";
+      reason = prompt("اكتب سبب الرفض أو الملاحظة المطلوبة") || "";
       if (!reason) return;
     }
     const r = await fetch("/api/approvals", {
@@ -1713,7 +1751,7 @@ function UsersView({ users, reload }: { users: any[]; reload: () => void }) {
             <span>
               {editingId
                 ? "عدّلي بيانات الحساب وصلاحيته ونطاق عمله"
-                : "أدخلي بيانات الحساب وحددي نطاق عمله"}
+                : "أدخل بيانات الحساب وحدد نطاق عمله"}
             </span>
           </div>
           <label>
@@ -1958,7 +1996,7 @@ function OperationalCapacity({ data }: { data: any }) {
         </div>
         <div>
           <h2>القدرة التشغيلية اليومية</h2>
-          <p>اختاري الموظف من الدليل وحددي مكان دوامه وورديته لذلك اليوم</p>
+          <p>اختر الموظف من الدليل وحدد مكان دوامه وورديته لذلك اليوم</p>
         </div>
         <label className="capacity-date">
           التاريخ
@@ -2000,7 +2038,7 @@ function OperationalCapacity({ data }: { data: any }) {
         <PanelTitle
           icon={Clock3}
           title="عرض جدول الدوام خلال فترة"
-          subtitle="حددي الفترة والموظف والمركز والوردية لعرض التكليفات المطابقة"
+          subtitle="حدد الفترة والموظف والمركز والوردية لعرض التكليفات المطابقة"
         />
         <div className="capacity-range-fields">
           <label>
@@ -2067,7 +2105,7 @@ function OperationalCapacity({ data }: { data: any }) {
               value={draft.staffId}
               onChange={(e) => setDraft({ ...draft, staffId: e.target.value })}
             >
-              <option value="">اختاري الموظف</option>
+              <option value="">اختر الموظف</option>
               {(data.staff || []).map((x: any) => (
                 <option key={x.id} value={x.id}>
                   {x.full_name} — {x.cadre_type} — {x.job_title || "بدون وظيفة"}
@@ -2084,7 +2122,7 @@ function OperationalCapacity({ data }: { data: any }) {
                 setDraft({ ...draft, stationId: e.target.value })
               }
             >
-              <option value="">اختاري المركز</option>
+              <option value="">اختر المركز</option>
               {(data.stations || []).map((x: any) => (
                 <option key={x.id} value={x.id}>
                   {x.name}
@@ -2782,7 +2820,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                     <select value={draft.stationId||""} onChange={e=>setDraft({...draft,stationId:e.target.value})}><option value="">غير محددة / مركزي</option>{(data.stations||[]).map((s:any)=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
                   ) : key === "fuelType" || key === "serviceStatus" ? (
                     <select value={draft[key] || ""} required={key==="serviceStatus"} onChange={e=>setDraft({...draft,[key]:e.target.value})}>
-                      <option value="">اختاري...</option>
+                      <option value="">اختر...</option>
                       {(key === "fuelType" ? [["بنزين","بنزين"],["سولار","سولار"]] : [["active","داخل الخدمة"],["out_of_service","خارج الخدمة"]]).map(([value,label])=><option key={value} value={value}>{label}</option>)}
                     </select>
                   ) : key === "governorate" ? (
@@ -2793,7 +2831,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                         setDraft({ ...draft, [key]: e.target.value })
                       }
                     >
-                      <option value="">اختاري المحافظة</option>
+                      <option value="">اختر المحافظة</option>
                       {governors.map((name) => (
                         <option key={name} value={name}>
                           {name}
@@ -2808,7 +2846,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                         setDraft({ ...draft, [key]: e.target.value })
                       }
                     >
-                      <option value="">اختاري نوع الكادر</option>
+                      <option value="">اختر نوع الكادر</option>
                       {["كادر", "عقد", "متطوع", "مستجيب", "مستجيب أول"].map(
                         (name) => (
                           <option key={name}>{name}</option>
@@ -3124,7 +3162,7 @@ function ReportsV2({
           </div>
           <div>
             <h2>مركز التقارير</h2>
-            <p>اختاري التقرير لعرضه داخل النظام ثم صدّريه عند الحاجة</p>
+            <p>اختر التقرير لعرضه داخل النظام ثم صدّره عند الحاجة</p>
           </div>
         </div>
       </section>
@@ -3662,7 +3700,7 @@ function FleetView({staff,stationsData,onImported}:{staff:any[];stationsData:any
   const load=useCallback(async()=>{const q=new URLSearchParams(period).toString();const r=await fetch(`/api/fleet?${q}`);if(r.ok)setData(await r.json());else toast.error((await r.json()).error||"تعذر تحميل الأسطول");},[period]);
   useEffect(()=>{load()},[load]);
   const set=(k:string,v:string)=>setDraft(p=>({...p,[k]:v}));
-  const save=async(e:React.FormEvent)=>{e.preventDefault();if(!vehicleId)return toast.error("اختاري المركبة");setBusy(true);
+  const save=async(e:React.FormEvent)=>{e.preventDefault();if(!vehicleId)return toast.error("اختر المركبة");setBusy(true);
     try {const r=await fetch("/api/fleet",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:tab,vehicleId:Number(vehicleId),...draft,fuelType:selected?.fuel_type})});const v=await r.json();if(!r.ok)throw Error(v.error);toast.success(tab==="fill"?"تم تسجيل التعبئة":"تم تسجيل الحركة");setDraft({filledAt:`${today}T09:00`,departedAt:`${today}T09:00`});await load();}catch(err){toast.error(String(err).replace(/^Error: /,""))}finally{setBusy(false)}};
   const importFleet=async()=>{setBusy(true);try {const r=await fetch("/api/fleet",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"import"})});const v=await r.json();if(!r.ok)throw Error(v.error);toast.success(`أضيفت ${v.added} مركبة؛ ${v.review} للمراجعة`);await load();onImported()}catch(err){toast.error(String(err).replace(/^Error: /,""))}finally{setBusy(false)}};
   useEffect(()=>{if(data.pendingImportCount>0 && !importAttempted && !busy){setImportAttempted(true);importFleet()}},[data.pendingImportCount,importAttempted,busy]);
@@ -3679,7 +3717,7 @@ function FleetView({staff,stationsData,onImported}:{staff:any[];stationsData:any
     <section className="panel"><PanelTitle icon={PlusCircle} title="إضافة حركة أو تعبئة" subtitle="يرتبط السجل بمركبة من الإعدادات، ويمكن إسناده لبلاغ موجود"/>
       <div className="fleet-tabs"><button className={tab==="fill"?"active":""} onClick={()=>{setTab("fill");setDraft({filledAt:`${today}T09:00`})}}>تعبئة وقود</button><button className={tab==="movement"?"active":""} onClick={()=>{setTab("movement");setDraft({departedAt:`${today}T09:00`})}}>حركة سيارة</button></div>
       <form className="fleet-form" onSubmit={save}>
-        <label>المركبة *<select value={vehicleId} required onChange={e=>{setVehicleId(e.target.value);setDraft(p=>({...p,incidentId:""}))}}><option value="">اختاري المركبة</option>{data.vehicles.filter((v:any)=>v.active!==0).map((v:any)=><option key={v.id} value={v.id}>{v.plate_number} — {v.fuel_type||"وقود غير محدد"}</option>)}</select></label>
+        <label>المركبة *<select value={vehicleId} required onChange={e=>{setVehicleId(e.target.value);setDraft(p=>({...p,incidentId:""}))}}><option value="">اختر المركبة</option>{data.vehicles.filter((v:any)=>v.active!==0).map((v:any)=><option key={v.id} value={v.id}>{v.plate_number} — {v.fuel_type||"وقود غير محدد"}</option>)}</select></label>
         <label>البلاغ المرتبط (اختياري)<select value={draft.incidentId||""} onChange={e=>set("incidentId",e.target.value)}><option value="">لا يوجد</option>{linked.map((i:any)=><option key={i.id} value={i.id}>{i.incident_number} — {i.call_date}</option>)}</select></label>
         {tab==="fill"?<><label>تاريخ ووقت التعبئة *<input required type="datetime-local" value={draft.filledAt||""} onChange={e=>set("filledAt",e.target.value)}/></label><label>الكمية (لتر) *<input required type="number" step="0.01" min="0.01" value={draft.liters||""} onChange={e=>set("liters",e.target.value)}/></label><label>عداد الكيلومترات<input type="number" step="0.1" min="0" value={draft.odometerKm||""} onChange={e=>set("odometerKm",e.target.value)}/></label><label>من قام بالتعبئة *<input required value={draft.filledByName||""} onChange={e=>set("filledByName",e.target.value)}/></label><label>المُعبّئ من دليل الموظفين<select value={draft.filledByStaffId||""} onChange={e=>{const v=staff.find((x:any)=>String(x.id)===e.target.value);setDraft({...draft,filledByStaffId:e.target.value,filledByName:v?.full_name||draft.filledByName||""})}}><option value="">اسم غير مسجل بالدليل</option>{staff.map((s:any)=><option key={s.id} value={s.id}>{s.full_name}</option>)}</select></label><label>مصدر الوقود<input value={draft.sourceName||""} onChange={e=>set("sourceName",e.target.value)}/></label><label>رقم القسيمة<input value={draft.voucherNumber||""} onChange={e=>set("voucherNumber",e.target.value)}/></label></>:<><label>تاريخ ووقت الخروج *<input required type="datetime-local" value={draft.departedAt||""} onChange={e=>set("departedAt",e.target.value)}/></label><label>تاريخ ووقت العودة<input type="datetime-local" value={draft.returnedAt||""} onChange={e=>set("returnedAt",e.target.value)}/></label><label>عداد البداية (كم) *<input required type="number" step="0.1" min="0" value={draft.kmStart||""} onChange={e=>set("kmStart",e.target.value)}/></label><label>عداد النهاية (كم)<input type="number" step="0.1" min="0" value={draft.kmEnd||""} onChange={e=>set("kmEnd",e.target.value)}/></label><label>الوجهة<input value={draft.destination||""} onChange={e=>set("destination",e.target.value)}/></label></>}
         <label>السائق من دليل الموظفين<select value={draft.driverStaffId||""} onChange={e=>{const v=staff.find((x:any)=>String(x.id)===e.target.value);setDraft({...draft,driverStaffId:e.target.value,driverName:v?.full_name||draft.driverName||""})}}><option value="">غير موجود بالدليل</option>{staff.map((s:any)=><option key={s.id} value={s.id}>{s.full_name}</option>)}</select></label><label>اسم السائق<input value={draft.driverName||""} onChange={e=>set("driverName",e.target.value)}/></label><label>ملاحظات<input value={draft.notes||""} onChange={e=>set("notes",e.target.value)}/></label><button className="primary" disabled={busy}><Save/> حفظ {tab==="fill"?"التعبئة":"الحركة"}</button>
@@ -3700,6 +3738,6 @@ function FleetView({staff,stationsData,onImported}:{staff:any[];stationsData:any
     <section className="panel table-panel"><div className="fleet-section-head"><PanelTitle icon={Activity} title="سجل التعبئة" subtitle="السائق والمُعبّئ ورقم البلاغ والقسيمة"/><button className="ghost" onClick={exportRows}><Download/> Excel (CSV)</button></div><div className="table-wrap"><table><thead><tr><th>التاريخ</th><th>المركبة</th><th>لتر</th><th>السائق</th><th>من عبّأ</th><th>البلاغ</th><th>القسيمة</th></tr></thead><tbody>{data.fuel.map((f:any)=><tr key={f.id}><td>{f.filled_at}</td><td>{f.plate_number}</td><td>{f.liters}</td><td>{f.driver_name||"—"}</td><td>{f.filled_by_name}</td><td>{f.incident_number||"—"}</td><td>{f.voucher_number||"—"}</td></tr>)}</tbody></table>{!data.fuel.length&&<Empty/>}</div></section>
     <section className="panel table-panel"><PanelTitle icon={Route} title="سجل الحركة" subtitle="حركات المركبات داخل وخارج البلاغات — التقرير الكامل في مركز التقارير"/><div className="table-wrap"><table><thead><tr><th>المركبة</th><th>السائق</th><th>الخروج</th><th>العودة</th><th>عداد البداية</th><th>عداد النهاية</th><th>المسافة</th><th>البلاغ</th></tr></thead><tbody>{data.movements.map((m:any)=><tr key={m.id}><td>{m.plate_number}</td><td>{m.driver_name||"—"}</td><td>{m.departed_at}</td><td>{m.returned_at||"—"}</td><td>{m.km_start}</td><td>{m.km_end??"—"}</td><td>{m.km_end==null?"—":(m.km_end-m.km_start).toFixed(1)}</td><td>{m.incident_number||"—"}</td></tr>)}</tbody></table>{!data.movements.length&&<Empty/>}</div></section>
     {editVehicle&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setEditVehicle(null)}}><form className="incident-detail-modal fleet-edit-modal" dir="rtl" onSubmit={saveVehicle}><div className="modal-head"><div><h2>تعديل المركبة {editVehicle.plate_number}</h2><p>تنعكس التغييرات في دليل المركبات والتقارير المرتبطة بها</p></div><button type="button" className="ghost" onClick={()=>setEditVehicle(null)}>إغلاق</button></div><div className="incident-detail-grid">{[["رقم اللوحة","plate_number"],["الشركة المصنعة","manufacturer"],["الطراز","model"],["نوع المركبة","ambulance_type"],["مكان العمل","work_location"]].map(([title,key])=><label key={key}>{title}<input required={key==="plate_number"} value={editVehicle[key]||""} onChange={e=>setEditVehicle({...editVehicle,[key]:e.target.value})}/></label>)}<label>المحطة<select value={editVehicle.station_id||""} onChange={e=>setEditVehicle({...editVehicle,station_id:e.target.value})}><option value="">غير محددة</option>{stationsData.map((s:any)=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>نوع الوقود<select value={editVehicle.fuel_type||""} onChange={e=>setEditVehicle({...editVehicle,fuel_type:e.target.value})}><option value="">غير محدد</option><option value="بنزين">بنزين</option><option value="سولار">سولار</option></select></label><label>حالة الخدمة<select disabled={editVehicle.service_status==="maintenance"} value={editVehicle.service_status||"active"} onChange={e=>setEditVehicle({...editVehicle,service_status:e.target.value})}><option value="active">داخل الخدمة</option><option value="out_of_service">خارج الخدمة</option>{editVehicle.service_status==="maintenance"&&<option value="maintenance">قيد الصيانة — تُغلق من طلب الصيانة</option>}</select></label><label>سبب الخروج من الخدمة<input value={editVehicle.out_of_service_reason||""} onChange={e=>setEditVehicle({...editVehicle,out_of_service_reason:e.target.value})}/></label></div><div className="modal-actions"><button type="button" className="ghost" onClick={()=>setEditVehicle(null)}>إلغاء</button><button className="primary" disabled={busy}><Save/> حفظ التعديلات</button></div></form></div>}
-    {newVehicle&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setNewVehicle(null)}}><form className="incident-detail-modal fleet-edit-modal" dir="rtl" onSubmit={addVehicle}><div className="modal-head"><div><h2>إضافة مركبة جديدة</h2><p>أضيفي بيانات المركبة لتظهر في التعبئة والحركة والبلاغات</p></div><button type="button" className="ghost" onClick={()=>setNewVehicle(null)}>إغلاق</button></div><div className="incident-detail-grid">{[["رقم اللوحة","plateNumber"],["الشركة المصنعة","manufacturer"],["الطراز","model"],["نوع المركبة","ambulanceType"],["مكان العمل","workLocation"]].map(([title,key])=><label key={key}>{title}<input required={key==="plateNumber"} value={newVehicle[key]||""} onChange={e=>setNewVehicle({...newVehicle,[key]:e.target.value})}/></label>)}<label>المحطة<select value={newVehicle.stationId||""} onChange={e=>setNewVehicle({...newVehicle,stationId:e.target.value})}><option value="">غير محددة</option>{stationsData.map((s:any)=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>نوع الوقود<select value={newVehicle.fuelType||""} onChange={e=>setNewVehicle({...newVehicle,fuelType:e.target.value})}><option value="">غير محدد</option><option value="بنزين">بنزين</option><option value="سولار">سولار</option></select></label></div><div className="modal-actions"><button type="button" className="ghost" onClick={()=>setNewVehicle(null)}>إلغاء</button><button className="primary" disabled={busy}><Save/> حفظ المركبة</button></div></form></div>}
+    {newVehicle&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setNewVehicle(null)}}><form className="incident-detail-modal fleet-edit-modal" dir="rtl" onSubmit={addVehicle}><div className="modal-head"><div><h2>إضافة مركبة جديدة</h2><p>أضف بيانات المركبة لتظهر في التعبئة والحركة والبلاغات</p></div><button type="button" className="ghost" onClick={()=>setNewVehicle(null)}>إغلاق</button></div><div className="incident-detail-grid">{[["رقم اللوحة","plateNumber"],["الشركة المصنعة","manufacturer"],["الطراز","model"],["نوع المركبة","ambulanceType"],["مكان العمل","workLocation"]].map(([title,key])=><label key={key}>{title}<input required={key==="plateNumber"} value={newVehicle[key]||""} onChange={e=>setNewVehicle({...newVehicle,[key]:e.target.value})}/></label>)}<label>المحطة<select value={newVehicle.stationId||""} onChange={e=>setNewVehicle({...newVehicle,stationId:e.target.value})}><option value="">غير محددة</option>{stationsData.map((s:any)=><option key={s.id} value={s.id}>{s.name}</option>)}</select></label><label>نوع الوقود<select value={newVehicle.fuelType||""} onChange={e=>setNewVehicle({...newVehicle,fuelType:e.target.value})}><option value="">غير محدد</option><option value="بنزين">بنزين</option><option value="سولار">سولار</option></select></label></div><div className="modal-actions"><button type="button" className="ghost" onClick={()=>setNewVehicle(null)}>إلغاء</button><button className="primary" disabled={busy}><Save/> حفظ المركبة</button></div></form></div>}
   </div>;
 }
