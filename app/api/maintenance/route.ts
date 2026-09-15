@@ -102,7 +102,7 @@ export async function PATCH(request: NextRequest) {
   const performed = typeof body.performedWork === "string" ? body.performedWork.trim() : "";
   const receiver = typeof body.receivedBy === "string" ? body.receivedBy.trim() : "";
   const receivedAt = typeof body.receivedAt === "string" ? body.receivedAt.trim() : "";
-  if (!Number.isInteger(id) || id < 1 || !performed || !receiver || !date(receivedAt)) return error("حددي الإصلاح المنفذ وتاريخ الاستلام واسم المستلم");
+  if (!Number.isInteger(id) || id < 1 || !performed || !receiver || !date(receivedAt)) return error("حدد الإصلاح المنفذ وتاريخ الاستلام واسم المستلم");
   const current = await env.DB.prepare("SELECT vehicle_id,status FROM vehicle_maintenance WHERE id=?").bind(id).first<any>();
   if (!current || current.status !== "open") return error("الطلب غير موجود أو مغلق بالفعل", 409);
   try {
