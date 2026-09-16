@@ -37,13 +37,17 @@ export async function GET(request:NextRequest) {
   for (let i=0;i<pending.length;i+=40) {
     await env.DB.batch(pending.slice(i,i+40).map((row:any)=>env.DB.prepare("INSERT INTO staff (full_name,cadre_type,job_title,detail) VALUES (?,?,?,?)").bind(row.fullName, row.category || "غير محدد", row.emtLevel || "غير محدد", JSON.stringify({ station: row.station, startYear: row.startYear, gender: row.gender, birthYear: row.birthYear, category: row.category, emtLevel: row.emtLevel, medicalQualification: row.medicalQualification, ambulanceLicence: row.ambulanceLicence }))));
   }
-  const [stations, vehicles, staff, settings] = await env.DB.batch([
-    env.DB.prepare("SELECT * FROM stations ORDER BY name"),
-    env.DB.prepare("SELECT * FROM vehicles ORDER BY plate_number"),
+  await env.DB.prepare("INSERT INTO centers (name,governorate) SELECT DISTINCT governorate,governorate FROM stations WHERE governorate IS NOT NULL AND trim(governorate)<>'' ON CONFLICT(name) DO NOTHING").run();
+  await env.DB.prepare("UPDATE stations SET center_id=(SELECT id FROM centers WHERE centers.name=stations.governorate LIMIT 1) WHERE center_id IS NULL").run();
+  const [centers, stations, vehicles, staff, settings] = await env.DB.batch([
+    env.DB.prepare("SELECT * FROM centers ORDER BY name"),
+    env.DB.prepare("SELECT s.*,c.name center_name FROM stations s LEFT JOIN centers c ON c.id=s.center_id ORDER BY s.name"),
+    env.DB.prepare("SELECT v.*,s.center_id,c.name center_name FROM vehicles v LEFT JOIN stations s ON s.id=v.station_id LEFT JOIN centers c ON c.id=s.center_id ORDER BY v.plate_number"),
     env.DB.prepare("SELECT * FROM staff ORDER BY full_name"),
     env.DB.prepare("SELECT * FROM system_settings ORDER BY category,key"),
   ]);
   return NextResponse.json({
+    centers: centers.results,
     stations: stations.results,
     vehicles: vehicles.results,
     staff: staff.results,
@@ -59,7 +63,7 @@ export async function PATCH(request: NextRequest) {
       { status: 403 },
     );
   const b = (await request.json()) as Record<string, any>;
-  if (!b.id || !["staff", "station", "vehicle"].includes(b.entity))
+  if (!b.id || !["staff", "center", "station", "vehicle"].includes(b.entity))
     return NextResponse.json(
       { error: "بيانات الموظف غير مكتملة" },
       { status: 400 },
@@ -77,11 +81,14 @@ export async function PATCH(request: NextRequest) {
         b.id,
       )
       .run();
+  else if (b.entity === "center")
+    await env.DB.prepare("UPDATE centers SET code=?,name=?,governorate=?,active=? WHERE id=?")
+      .bind(b.code || null, b.name, b.governorate || null, b.active === false ? 0 : 1, b.id).run();
   else if (b.entity === "station")
     await env.DB.prepare(
-      "UPDATE stations SET code=?,name=?,governorate=? WHERE id=?",
+      "UPDATE stations SET code=?,name=?,governorate=?,center_id=? WHERE id=?",
     )
-      .bind(b.code, b.name, b.governorate, b.id)
+      .bind(b.code, b.name, b.governorate, b.centerId ? Number(b.centerId) : null, b.id)
       .run();
   else {
     const openMaintenance = await env.DB.prepare("SELECT id FROM vehicle_maintenance WHERE vehicle_id=? AND status='open' LIMIT 1").bind(b.id).first();
@@ -155,11 +162,14 @@ export async function POST(request: NextRequest) {
     }
     return NextResponse.json({ ok: true, added, total: staffArchive.length });
   }
-  if (b.entity === "station")
+  if (b.entity === "center")
+    await env.DB.prepare("INSERT INTO centers (code,name,governorate) VALUES (?,?,?)")
+      .bind(b.code || null, b.name, b.governorate || null).run();
+  else if (b.entity === "station")
     await env.DB.prepare(
-      "INSERT INTO stations (code,name,governorate) VALUES (?,?,?)",
+      "INSERT INTO stations (code,name,governorate,center_id) VALUES (?,?,?,?)",
     )
-      .bind(b.code, b.name, b.governorate)
+      .bind(b.code, b.name, b.governorate, b.centerId ? Number(b.centerId) : null)
       .run();
   else if (b.entity === "vehicle")
     await env.DB.prepare(

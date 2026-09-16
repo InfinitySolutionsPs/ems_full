@@ -1,4 +1,6 @@
-CREATE TABLE IF NOT EXISTS stations (id BIGSERIAL PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, governorate TEXT NOT NULL, active INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS centers (id BIGSERIAL PRIMARY KEY, code TEXT UNIQUE, name TEXT NOT NULL UNIQUE, governorate TEXT, active INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS stations (id BIGSERIAL PRIMARY KEY, code TEXT NOT NULL UNIQUE, name TEXT NOT NULL, governorate TEXT NOT NULL, center_id BIGINT REFERENCES centers(id), active INTEGER NOT NULL DEFAULT 1);
+ALTER TABLE stations ADD COLUMN IF NOT EXISTS center_id BIGINT REFERENCES centers(id);
 CREATE TABLE IF NOT EXISTS vehicles (id BIGSERIAL PRIMARY KEY, plate_number TEXT NOT NULL UNIQUE, station_id BIGINT REFERENCES stations(id), manufacturer TEXT, model TEXT, production_year INTEGER, fuel_type TEXT, ambulance_type TEXT, active INTEGER NOT NULL DEFAULT 1, service_status TEXT NOT NULL DEFAULT 'active', out_of_service_reason TEXT, work_location TEXT, fleet_source_row INTEGER);
 ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS chassis_number TEXT;
 ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS mileage_km DOUBLE PRECISION;

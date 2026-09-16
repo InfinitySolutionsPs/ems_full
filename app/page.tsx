@@ -8,6 +8,7 @@ import {
   Ambulance,
   BarChart3,
   Bell,
+  Building2,
   CheckCircle2,
   ChevronLeft,
   ClipboardCheck,
@@ -97,10 +98,13 @@ const stations = [
   "محطة خانيونس",
   "محطة رفح",
 ];
-const categories = ["Medical", "Trauma", "Other"];
+const categories = ["Medical", "Trauma", "Martyr", "Delivery", "Accident", "Other"];
 const categoryArabic: Record<string, string> = {
   Medical: "حالات مرضية",
   Trauma: "إصابات",
+  Martyr: "شهيد",
+  Delivery: "ولادة",
+  Accident: "حوادث",
   Other: "أخرى",
 };
 const urgencyArabic: Record<string, string> = {
@@ -131,6 +135,7 @@ const emptyForm: Record<string, string> = {
   dropoffLocation: "",
   shift: "",
   station: "",
+  center: "",
   vehicle: "",
   kmStart: "",
   kmEnd: "",
@@ -190,6 +195,7 @@ export default function HomePage() {
     [currentUser, setCurrentUser] = useState<any>(null),
     [currentPermissions, setCurrentPermissions] = useState<string[]>([]),
     [settingsData, setSettingsData] = useState<any>({
+      centers: [],
       stations: [],
       vehicles: [],
       staff: [],
@@ -439,7 +445,7 @@ export default function HomePage() {
           />
         )}{" "}
         {view === "new" && (
-          <IncidentForm form={form} setField={setField} submit={submit} vehicles={settingsData.vehicles} />
+          <IncidentForm form={form} setField={setField} submit={submit} centers={settingsData.centers} stationsData={settingsData.stations} vehicles={settingsData.vehicles} />
         )}{" "}
         {view === "records" && (
           <Records
@@ -848,13 +854,21 @@ function IncidentForm({
   form,
   setField,
   submit,
+  centers,
+  stationsData,
   vehicles,
 }: {
   form: Record<string, string>;
   setField: (k: string, v: string) => void;
   submit: (e: React.FormEvent) => void;
+  centers: any[];
+  stationsData: any[];
   vehicles: any[];
 }) {
+  const selectedCenterId = Number(form.center || 0);
+  const availableStations = (stationsData || []).filter((s:any) => !selectedCenterId || Number(s.center_id) === selectedCenterId);
+  const selectedStation = (stationsData || []).find((s:any) => s.name === form.station);
+  const availableVehicles = (vehicles || []).filter((v:any) => v.active !== 0 && (!selectedCenterId || Number(v.center_id) === selectedCenterId) && (!selectedStation || Number(v.station_id) === Number(selectedStation.id)));
   const field = (
     name: string,
     label: string,
@@ -972,9 +986,10 @@ function IncidentForm({
       </FormSection>
       <FormSection icon={Ambulance} title="المحطة والمركبة">
         <div className="form-grid cols-4">
-          {select("station", "المحطة", stations, true)}
+          <label>المركز <em>*</em><select required value={form.center} onChange={e=>{setField("center",e.target.value);setField("station","");setField("vehicle","");}}><option value="">اختر المركز...</option>{(centers||[]).filter((c:any)=>c.active!==0).map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
+          <label>المحطة <em>*</em><select required disabled={!form.center} value={form.station} onChange={e=>{setField("station",e.target.value);setField("vehicle","");}}><option value="">{form.center?"اختر المحطة...":"اختر المركز أولًا"}</option>{availableStations.filter((s:any)=>s.active!==0).map((s:any)=><option key={s.id} value={s.name}>{s.name}</option>)}</select></label>
           {select("shift", "الوردية", ["A", "B", "C"], true)}
-          <label>رقم المركبة<select value={form.vehicle} onChange={e=>setField("vehicle",e.target.value)}><option value="">بدون مركبة</option>{form.vehicle && !(vehicles||[]).some((v:any)=>v.plate_number===form.vehicle) && <option value={form.vehicle}>{form.vehicle} (رقم سابق)</option>}{(vehicles||[]).filter((v:any)=>v.active!==0).map((v:any)=><option key={v.id} value={v.plate_number}>{v.plate_number} — {v.fuel_type||"وقود غير محدد"}</option>)}</select></label>
+          <label>رقم المركبة<select disabled={!form.center} value={form.vehicle} onChange={e=>setField("vehicle",e.target.value)}><option value="">بدون مركبة</option>{form.vehicle && !(vehicles||[]).some((v:any)=>v.plate_number===form.vehicle) && <option value={form.vehicle}>{form.vehicle} (رقم سابق)</option>}{availableVehicles.map((v:any)=><option key={v.id} value={v.plate_number}>{v.plate_number} — {v.fuel_type||"وقود غير محدد"}</option>)}</select></label>
           {field("crew", "أفراد الطاقم")}
           {field("kmStart", "عداد البداية", "number")}
           {field("kmEnd", "عداد النهاية", "number")}
@@ -982,16 +997,13 @@ function IncidentForm({
         </div>
       </FormSection>
       <FormSection icon={Clock3} title="التوقيتات">
+        <p className="form-section-note">يُستخدم تاريخ البلاغ لجميع مراحل الحركة؛ أدخل الساعة والدقائق لكل مرحلة فقط.</p>
         <div className="form-grid cols-4">
           {field("callDate", "تاريخ البلاغ", "date", true)}
           {field("callTime", "وقت البلاغ", "time", true)}
-          {field("dispatchDate", "تاريخ التحريك", "date")}
           {field("dispatchTime", "وقت التحريك", "time")}
-          {field("onSceneDate", "تاريخ الوصول للموقع", "date")}
           {field("arrivalTime", "وقت الوصول للموقع", "time")}
-          {field("hospitalDate", "تاريخ الوصول للمستشفى", "date")}
           {field("hospitalTime", "وقت الوصول للمستشفى", "time")}
-          {field("availableDate", "تاريخ الجاهزية", "date")}
           {field("clearTime", "وقت الجاهزية", "time")}
         </div>
       </FormSection>
@@ -1278,13 +1290,9 @@ function Records({
                 ["vehicle", "المركبة", "text"],
                 ["callDate", "التاريخ", "date"],
                 ["callTime", "وقت البلاغ", "time"],
-                ["dispatchDate", "تاريخ التحريك", "date"],
                 ["dispatchTime", "الانطلاق", "time"],
-                ["onSceneDate", "تاريخ الوصول للموقع", "date"],
                 ["arrivalTime", "الوصول", "time"],
-                ["hospitalDate", "تاريخ المستشفى", "date"],
                 ["hospitalTime", "وقت المستشفى", "time"],
-                ["availableDate", "تاريخ الجاهزية", "date"],
                 ["clearTime", "الجاهزية", "time"],
                 ["kmStart", "عداد البداية", "number"],
                 ["kmEnd", "عداد النهاية", "number"],
@@ -2671,6 +2679,12 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
     }
   };
   const configs: any = {
+    center: {
+      title: "المراكز",
+      icon: Building2,
+      fields: [["code", "الرمز"], ["name", "اسم المركز"], ["governorate", "المحافظة"]],
+      rows: data.centers,
+    },
     station: {
       title: "المحطات",
       icon: MapPin,
@@ -2678,6 +2692,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
         ["code", "الرمز"],
         ["name", "اسم المحطة"],
         ["governorate", "المحافظة"],
+        ["centerId", "المركز التابع له"],
       ],
       rows: data.stations,
     },
@@ -2814,7 +2829,9 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
               {c.fields.map(([key, label]: string[]) => (
                 <label key={key}>
                   {label}
-                  {key === "stationId" ? (
+                  {key === "centerId" ? (
+                    <select required value={draft.centerId||""} onChange={e=>setDraft({...draft,centerId:e.target.value})}><option value="">اختر المركز</option>{(data.centers||[]).map((x:any)=><option key={x.id} value={x.id}>{x.name}</option>)}</select>
+                  ) : key === "stationId" ? (
                     <select value={draft.stationId||""} onChange={e=>setDraft({...draft,stationId:e.target.value})}><option value="">غير محددة / مركزي</option>{(data.stations||[]).map((s:any)=><option key={s.id} value={s.id}>{s.name}</option>)}</select>
                   ) : key === "fuelType" || key === "serviceStatus" ? (
                     <select value={draft[key] || ""} required={key==="serviceStatus"} onChange={e=>setDraft({...draft,[key]:e.target.value})}>
@@ -2895,8 +2912,10 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                   <tr>
                     {(tab === "staff"
                       ? ["الاسم", "المركز", "سنة الالتحاق", "الجنس", "سنة الميلاد", "الفئة", "مستوى المسعف", "المؤهل الطبي", "رخصة الإسعاف"]
+                      : tab === "center"
+                        ? ["الرمز", "اسم المركز", "المحافظة"]
                       : tab === "station"
-                        ? ["الرمز", "اسم المحطة", "المحافظة"]
+                        ? ["الرمز", "اسم المحطة", "المحافظة", "المركز"]
                         : [
                             "رقم المركبة",
                             "الشركة المصنعة",
@@ -2919,8 +2938,10 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                     <tr key={r.id}>
                       {(tab === "staff"
                         ? (()=>{let d:any={};try{d=JSON.parse(r.detail||"{}")}catch{} return [r.full_name,d.station,d.startYear,d.gender==="Male"?"ذكر":d.gender==="Female"?"أنثى":d.gender,d.birthYear,d.category||r.cadre_type,d.emtLevel||r.job_title,d.medicalQualification==="None"?"—":d.medicalQualification,d.ambulanceLicence==="Yes"?"نعم":d.ambulanceLicence==="No"?"لا":"—"]})()
-                        : tab === "station"
+                        : tab === "center"
                           ? [r.code, r.name, r.governorate]
+                        : tab === "station"
+                          ? [r.code, r.name, r.governorate, r.center_name]
                           : [
                               r.plate_number,
                               r.manufacturer,
@@ -2957,11 +2978,14 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                                     jobTitle: r.job_title || "",
                                     detail: r.detail || "",
                                   }
+                                : tab === "center"
+                                  ? { code:r.code||"", name:r.name||"", governorate:r.governorate||"" }
                                 : tab === "station"
                                   ? {
                                       code: r.code || "",
                                       name: r.name || "",
                                       governorate: r.governorate || "",
+                                      centerId: String(r.center_id || ""),
                                     }
                                   : {
                                       plateNumber: r.plate_number || "",
