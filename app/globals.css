@@ -67,6 +67,7 @@ svg {
   display: flex;
   flex-direction: column;
   box-shadow: -8px 0 28px rgba(20, 20, 30, 0.025);
+  overflow: hidden;
 }
 .brand {
   display: flex;
@@ -104,6 +105,12 @@ svg {
   flex-direction: column;
   gap: 7px;
   margin-top: 24px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-left: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #d9dde4 transparent;
 }
 .sidebar nav button {
   height: 52px;

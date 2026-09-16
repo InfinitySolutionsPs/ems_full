@@ -312,8 +312,8 @@ export default function HomePage() {
     { id: "maintenance", label: "صيانة المركبات", icon: Wrench, permission:"maintenance.view" },
     { id: "approvals", label: "اعتماد الإحصائيات", icon: ClipboardCheck, permission:"approvals.manage" },
     { id: "reports", label: "التقارير", icon: FileBarChart, permission:"reports.view" },
-    { id: "users", label: "المستخدمون", icon: UserCog, permission:"users.manage" },
     { id: "settings", label: "الإعدادات", icon: Settings, permission:"settings.manage" },
+    { id: "users", label: "المستخدمون", icon: UserCog, permission:"users.manage" },
   ].filter(item=>can(item.permission)) as any[];
   return (
     <div className="app-shell">
