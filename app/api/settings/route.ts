@@ -108,11 +108,14 @@ export async function PATCH(request: NextRequest) {
       .bind(b.code, b.name, b.governorate, b.centerId ? Number(b.centerId) : null, b.id)
       .run();
   else {
+    const requestedMileage = Number(b.mileageKm || 0);
+    if (!Number.isFinite(requestedMileage) || requestedMileage < 0)
+      return NextResponse.json({ error: "قراءة عداد المركبة غير صالحة" }, { status: 400 });
     const openMaintenance = await env.DB.prepare("SELECT id FROM vehicle_maintenance WHERE vehicle_id=? AND status='open' LIMIT 1").bind(b.id).first();
     if (openMaintenance && b.serviceStatus !== "maintenance")
       return NextResponse.json({ error: "هذه المركبة قيد الصيانة؛ لا تُعاد للخدمة إلا بإغلاق طلب الصيانة" }, { status: 409 });
     await env.DB.prepare(
-      "UPDATE vehicles SET plate_number=?,manufacturer=?,model=?,ambulance_type=?,fuel_type=?,work_location=?,service_status=?,out_of_service_reason=?,active=?,station_id=? WHERE id=?",
+      "UPDATE vehicles SET plate_number=?,manufacturer=?,model=?,ambulance_type=?,fuel_type=?,work_location=?,service_status=?,out_of_service_reason=?,active=?,station_id=?,mileage_km=? WHERE id=?",
     )
       .bind(
         b.plateNumber,
@@ -125,6 +128,7 @@ export async function PATCH(request: NextRequest) {
         openMaintenance ? "طلب صيانة مفتوح" : b.outOfServiceReason || null,
         openMaintenance || b.serviceStatus === "out_of_service" ? 0 : 1,
         b.stationId ? Number(b.stationId) : null,
+        Math.max(requestedMileage, Number((await env.DB.prepare("SELECT mileage_km FROM vehicles WHERE id=?").bind(b.id).first<any>())?.mileage_km || 0)),
         b.id,
       )
       .run();
@@ -188,9 +192,12 @@ export async function POST(request: NextRequest) {
     )
       .bind(b.code, b.name, b.governorate, b.centerId ? Number(b.centerId) : null)
       .run();
-  else if (b.entity === "vehicle")
+  else if (b.entity === "vehicle") {
+    const requestedMileage = Number(b.mileageKm || 0);
+    if (!Number.isFinite(requestedMileage) || requestedMileage < 0)
+      return NextResponse.json({ error: "قراءة عداد المركبة غير صالحة" }, { status: 400 });
     await env.DB.prepare(
-      "INSERT INTO vehicles (plate_number,manufacturer,model,ambulance_type,fuel_type,work_location,service_status,out_of_service_reason,active,station_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO vehicles (plate_number,manufacturer,model,ambulance_type,fuel_type,work_location,service_status,out_of_service_reason,active,station_id,mileage_km) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
     )
       .bind(
         b.plateNumber,
@@ -203,8 +210,10 @@ export async function POST(request: NextRequest) {
         b.outOfServiceReason || null,
         b.serviceStatus === "out_of_service" ? 0 : 1,
         b.stationId ? Number(b.stationId) : null,
+        requestedMileage,
       )
       .run();
+  }
   else if (b.entity === "staff")
     await env.DB.prepare(
       "INSERT INTO staff (full_name,cadre_type,job_title,detail,center_id) VALUES (?,?,?,?,?)",
