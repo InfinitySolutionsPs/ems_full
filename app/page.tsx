@@ -85,6 +85,8 @@ type Dashboard = {
     distance: number;
     response: number;
   }[];
+  crew: { name: string; value: number }[];
+  vehicleStatus: { name: string; value: number }[];
 };
 
 const governors = ["غزة", "شمال غزة", "الوسطى", "خانيونس", "رفح"];
@@ -169,6 +171,8 @@ export default function HomePage() {
     timeline: [],
     cases: [],
     stations: [],
+    crew: [],
+    vehicleStatus: [],
   });
   const [incidents, setIncidents] = useState<Incident[]>([]),
     [filters, setFilters] = useState({
@@ -592,58 +596,88 @@ function DashboardView({
 }) {
   const s = dashboard.summary || {};
   const total = Number(s.total || 0);
-  const topGovernorate = dashboard.governorates[0];
   const cards = [
     {
-      label: "إجمالي البلاغات",
-      value: s.total || 0,
-      sub: "بلاغ خلال الفترة",
+      label: "الحالات المنقولة",
+      value: s.transferred || 0,
+      sub: "حالة مسجلة ومنقولة",
       icon: Siren,
       tone: "red",
-      progress: 100,
+      progress: total ? Math.min(100,(Number(s.transferred||0)/total)*100) : 0,
     },
     {
-      label: "المستفيدون",
-      value: s.beneficiaries || 0,
-      sub: "مستفيد مسجل",
+      label: "الشهداء",
+      value: s.martyrs || 0,
+      sub: "وفق البلاغات المعتمدة",
+      icon: HeartPulse,
+      tone: "navy",
+      progress: total ? Math.min(100,(Number(s.martyrs||0)/total)*100) : 0,
+    },
+    {
+      label: "الإصابات",
+      value: s.injuries || 0,
+      sub: "حالات مصنفة كإصابات",
+      icon: Activity,
+      tone: "amber",
+      progress: total ? Math.min(100,(Number(s.injuries||0)/total)*100) : 0,
+    },
+    {
+      label: "السيارات العاملة",
+      value: s.workingVehicles || 0,
+      sub: "مركبة جاهزة للتشغيل",
+      icon: Ambulance,
+      tone: "green",
+      progress: Number(s.workingVehicles||0)+Number(s.outVehicles||0) ? (Number(s.workingVehicles||0)/(Number(s.workingVehicles||0)+Number(s.outVehicles||0)))*100 : 0,
+    },
+    {
+      label: "السيارات خارج الخدمة",
+      value: s.outVehicles || 0,
+      sub: "صيانة أو توقف تشغيلي",
+      icon: Wrench,
+      tone: "red",
+      progress: Number(s.workingVehicles||0)+Number(s.outVehicles||0) ? (Number(s.outVehicles||0)/(Number(s.workingVehicles||0)+Number(s.outVehicles||0)))*100 : 0,
+    },
+    {
+      label: "المراكز والمحطات",
+      value: s.centers || 0,
+      sub: "مركز ومحطة فعالة",
+      icon: MapPin,
+      tone: "blue",
+      progress: Math.min(100,Number(s.centers||0)*10),
+    },
+    {
+      label: "عمليات التنسيق",
+      value: s.coordinations || 0,
+      sub: "عملية خلال الفترة المحددة",
+      icon: ClipboardCheck,
+      tone: "purple",
+      progress: Math.min(100,Number(s.coordinations||0)*2),
+    },
+    {
+      label: "الطواقم العاملة",
+      value: s.activeCrew || 0,
+      sub: `${dashboard.crew.length} تصنيفات وظيفية`,
       icon: UsersRound,
       tone: "blue",
-      progress: total ? Math.min(100, (Number(s.beneficiaries || 0) / total) * 100) : 0,
-    },
-    {
-      label: "متوسط الاستجابة",
-      value: `${s.avgResponse || 0}`,
-      unit: "دقيقة",
-      sub: "من التحريك حتى الوصول",
-      icon: Clock3,
-      tone: "amber",
-      progress: Math.max(8, Math.min(100, 100 - Number(s.avgResponse || 0) * 3)),
+      progress: Math.min(100,Number(s.activeCrew||0)),
     },
     {
       label: "المسافة المقطوعة",
       value: s.distance || 0,
       unit: "كم",
-      sub: `${s.redCases || 0} حالة حمراء`,
+      sub: "إجمالي الإنجاز الميداني",
       icon: Route,
       tone: "green",
-      progress: total ? Math.min(100, (Number(s.redCases || 0) / total) * 100) : 0,
+      progress: Math.min(100,Number(s.distance||0)/100),
     },
     {
-      label: "الحالات الحمراء",
-      value: s.redCases || 0,
-      sub: total ? `${Math.round((Number(s.redCases || 0) / total) * 100)}% من البلاغات` : "لا توجد بلاغات في الفترة",
-      icon: AlertTriangle,
-      tone: "purple",
-      progress: total ? Math.min(100, (Number(s.redCases || 0) / total) * 100) : 0,
-    },
-    {
-      label: "التغطية الجغرافية",
-      value: dashboard.governorates.length,
-      unit: "محافظة",
-      sub: topGovernorate ? `الأعلى: ${topGovernorate.name}` : "لا توجد بيانات في الفترة",
-      icon: MapPin,
-      tone: "navy",
-      progress: Math.min(100, dashboard.governorates.length * 20),
+      label: "متوسط الاستجابة",
+      value: s.avgResponse || 0,
+      unit: "دقيقة",
+      sub: "من التحريك حتى الوصول",
+      icon: Clock3,
+      tone: "amber",
+      progress: Math.max(8,Math.min(100,100-Number(s.avgResponse||0)*3)),
     },
   ];
   return (
@@ -652,8 +686,8 @@ function DashboardView({
       <section className="dashboard-overview panel">
         <div>
           <span className="dashboard-live"><i /> بيانات تشغيلية معتمدة</span>
-          <h2>ملخص أداء الإسعاف والطوارئ</h2>
-          <p>تتحدث جميع المؤشرات والرسوم مباشرة عند تغيير الفترة أو المحافظة أو التصنيف.</p>
+          <h2>لوحة الإنجاز التشغيلي للإسعاف والطوارئ</h2>
+          <p>قراءة مباشرة للحالات والطواقم والأسطول والمراكز وعمليات التنسيق.</p>
         </div>
         <div className="dashboard-period">
           <small>الفترة المعروضة</small>
@@ -678,6 +712,12 @@ function DashboardView({
             </div>
           </article>
         ))}
+      </section>
+      <section className="achievement-ribbon">
+        <div><b>{s.total||0}</b><span>بلاغًا معتمدًا</span></div>
+        <div><b>{s.beneficiaries||0}</b><span>مستفيدًا</span></div>
+        <div><b>{s.redCases||0}</b><span>حالة حرجة</span></div>
+        <div><b>{dashboard.governorates.length}</b><span>محافظات مغطاة</span></div>
       </section>
       <section className="charts-grid">
         <article className="panel chart-wide">
@@ -717,32 +757,32 @@ function DashboardView({
         <article className="panel">
           <PanelTitle
             icon={Gauge}
-            title="توزيع الحالات"
-            subtitle="حسب التصنيف الرئيسي"
+            title="جاهزية الأسطول"
+            subtitle="السيارات العاملة وخارج الخدمة"
           />
           <div className="chart-body pie-wrap">
             <ResponsiveContainer width="100%" height={250}>
               <PieChart>
                 <Pie
-                  data={dashboard.categories}
+                  data={dashboard.vehicleStatus}
                   dataKey="value"
                   nameKey="name"
                   innerRadius={62}
                   outerRadius={92}
                   paddingAngle={4}
                 >
-                  {dashboard.categories.map((_, i) => (
-                    <Cell key={i} fill={palette[i % palette.length]} />
+                  {dashboard.vehicleStatus.map((_, i) => (
+                    <Cell key={i} fill={i===0?"#198754":"#c4172c"} />
                   ))}
                 </Pie>
                 <Tooltip />
               </PieChart>
             </ResponsiveContainer>
             <div className="legend">
-              {dashboard.categories.map((x, i) => (
+              {dashboard.vehicleStatus.map((x, i) => (
                 <span key={x.name}>
-                  <i style={{ background: palette[i % palette.length] }} />
-                  {categoryArabic[x.name] || x.name}
+                  <i style={{ background: i===0?"#198754":"#c4172c" }} />
+                  {x.name}
                   <b>{x.value}</b>
                 </span>
               ))}
@@ -776,11 +816,11 @@ function DashboardView({
         <article className="panel chart-half">
           <PanelTitle
             icon={BarChart3}
-            title="أعلى أنواع الحالات"
-            subtitle="الأكثر تكرارًا خلال الفترة"
+            title="تصنيف الطواقم العاملة"
+            subtitle="التوزيع حسب المسمى أو الكادر"
           />
           <div className="ranking">
-            {dashboard.cases.map((x, i) => (
+            {dashboard.crew.map((x, i) => (
               <div key={x.name}>
                 <span className="rank">{i + 1}</span>
                 <div>
@@ -788,7 +828,7 @@ function DashboardView({
                   <span>
                     <i
                       style={{
-                        width: `${Math.max(8, (x.value / (dashboard.cases[0]?.value || 1)) * 100)}%`,
+                        width: `${Math.max(8, (x.value / (dashboard.crew[0]?.value || 1)) * 100)}%`,
                       }}
                     />
                   </span>
@@ -796,7 +836,7 @@ function DashboardView({
                 <strong>{x.value}</strong>
               </div>
             ))}
-            {!dashboard.cases.length && <Empty />}
+            {!dashboard.crew.length && <Empty />}
           </div>
         </article>
       </section>

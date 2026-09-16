@@ -384,9 +384,14 @@ svg {
 }
 .kpi-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 16px;
 }
+.achievement-ribbon { display:grid; grid-template-columns:repeat(4,1fr); gap:1px; overflow:hidden; border-radius:18px; background:#dfe2e8; box-shadow:var(--shadow); }
+.achievement-ribbon div { position:relative; background:linear-gradient(145deg,#fff,#fbf5f6); padding:19px 22px; display:flex; align-items:center; justify-content:center; gap:10px; overflow:hidden; }
+.achievement-ribbon div::after { content:""; position:absolute; width:65px; height:65px; border-radius:50%; background:rgba(196,23,44,.06); left:-25px; bottom:-30px; }
+.achievement-ribbon b { color:var(--red); font-size:27px; line-height:1; }
+.achievement-ribbon span { color:#59616e; font-size:12px; font-weight:800; }
 .dashboard-overview {
   padding: 22px 24px;
   display: flex;
@@ -916,7 +921,7 @@ tbody tr:hover {
 }
 @media (max-width: 1200px) {
   .kpi-grid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(3, 1fr);
   }
   .report-cards {
     grid-template-columns: repeat(2, 1fr);
@@ -990,6 +995,8 @@ tbody tr:hover {
   .settings-grid {
     grid-template-columns: 1fr;
   }
+  .kpi-grid { grid-template-columns:repeat(2,1fr); }
+  .achievement-ribbon { grid-template-columns:repeat(2,1fr); }
 }
 @media (max-width: 560px) {
   .main {
@@ -1009,6 +1016,7 @@ tbody tr:hover {
   .cols-3 {
     grid-template-columns: 1fr;
   }
+  .achievement-ribbon { grid-template-columns:1fr; }
   .kpi {
     min-height: 132px;
   }
