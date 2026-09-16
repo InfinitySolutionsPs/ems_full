@@ -92,17 +92,18 @@ export async function POST(request: NextRequest) {
   try {
     let result;
     if (b.action === "fill") {
-      const liters=number(b.liters), odometer=number(b.odometerKm);
-      if (!validDate(b.filledAt) || liters==null || !Number.isFinite(liters) || liters<=0 || (odometer!=null && (!Number.isFinite(odometer)||odometer<0)) || !text(b.filledByName) || !["بنزين","سولار"].includes(text(b.fuelType))) return reply("يرجى إدخال تاريخ وكمية صحيحة واسم المُعبّئ وتحديد وقود السيارة في الإعدادات");
+      const liters=number(b.liters), odometer=Number(vehicle.mileage_km||0);
+      if (!validDate(b.filledAt) || liters==null || !Number.isFinite(liters) || liters<=0 || !text(b.filledByName) || !["بنزين","سولار"].includes(text(b.fuelType))) return reply("يرجى إدخال تاريخ وكمية صحيحة واسم المُعبّئ وتحديد وقود السيارة في الإعدادات");
       if (vehicle.fuel_type && text(b.fuelType)!==vehicle.fuel_type) return reply("نوع الوقود لا يطابق بطاقة المركبة");
       result=await env.DB.prepare("INSERT INTO fuel_fillings (vehicle_id,incident_id,filled_at,liters,fuel_type,odometer_km,driver_staff_id,driver_name,filled_by_staff_id,filled_by_name,source_name,voucher_number,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
         .bind(vehicleId,incidentId,b.filledAt,liters,text(b.fuelType),odometer,staffId,text(b.driverName)||null,fillerId,text(b.filledByName),text(b.sourceName)||null,text(b.voucherNumber)||null,text(b.notes)||null,access.email).run();
     } else if (b.action === "movement") {
       if (!vehicle.active) return reply("المركبة خارج الخدمة؛ لا يمكن تسجيل حركة جديدة");
-      const start=number(b.kmStart),end=number(b.kmEnd);
+      const start=Number(vehicle.mileage_km||0),end=number(b.kmEnd);
       if (!validDate(b.departedAt) || (b.returnedAt && (!validDate(b.returnedAt)||String(b.returnedAt)<String(b.departedAt))) || start==null || !Number.isFinite(start) || start<0 || (end!=null && (!Number.isFinite(end)||end<start))) return reply("التاريخ أو قراءة العداد غير صحيحة");
       result=await env.DB.prepare("INSERT INTO vehicle_movements (vehicle_id,incident_id,driver_staff_id,driver_name,departed_at,returned_at,km_start,km_end,destination,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
         .bind(vehicleId,incidentId,staffId,text(b.driverName)||null,b.departedAt,b.returnedAt||null,start,end,text(b.destination)||null,text(b.notes)||null,access.email).run();
+      if (end!=null) await env.DB.prepare("UPDATE vehicles SET mileage_km=? WHERE id=?").bind(end,vehicleId).run();
     } else return reply("نوع العملية غير معروف");
     await env.DB.prepare("INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,?,?,?,?)")
       .bind(access.email,"create",b.action==="fill"?"fuel_filling":"vehicle_movement",String(result.meta.last_row_id),vehicle.plate_number).run();

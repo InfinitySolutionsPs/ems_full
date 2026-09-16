@@ -85,15 +85,17 @@ export async function POST(request: NextRequest) {
       { error: "يرجى استكمال الحقول الإلزامية", fields: missing },
       { status: 400 },
     );
-  const kmStart = Number(body.kmStart || 0),
-    kmEnd = Number(body.kmEnd || 0);
-  const distanceKm = kmEnd >= kmStart ? kmEnd - kmStart : 0;
+  let kmStart = 0;
+  const kmEnd = body.kmEnd === "" || body.kmEnd == null ? null : Number(body.kmEnd);
   const responseMinutes = minutesBetweenDates(body.callDate, body.dispatchTime || body.callTime, body.callDate, body.arrivalTime);
   const serviceMinutes = minutesBetweenDates(body.callDate, body.callTime, body.callDate, body.clearTime);
   const actor = access.email || "system";
   try {
-    const chosenVehicle = body.vehicle ? await env.DB.prepare("SELECT v.id FROM vehicles v JOIN stations s ON s.id=v.station_id WHERE v.plate_number=? AND v.active=1 AND s.name=?").bind(body.vehicle,body.station).first<{id:number}>() : null;
+    const chosenVehicle = body.vehicle ? await env.DB.prepare("SELECT v.id,v.mileage_km FROM vehicles v JOIN stations s ON s.id=v.station_id WHERE v.plate_number=? AND v.active=1 AND s.name=?").bind(body.vehicle,body.station).first<{id:number;mileage_km:number|null}>() : null;
     if (body.vehicle && !chosenVehicle) return NextResponse.json({error:"المركبة لا تتبع المحطة المختارة أو أنها خارج الخدمة"},{status:400});
+    kmStart=chosenVehicle?Number(chosenVehicle.mileage_km||0):0;
+    if (kmEnd!=null && (!Number.isFinite(kmEnd) || kmEnd<kmStart)) return NextResponse.json({error:"عداد النهاية يجب أن يساوي أو يزيد عن عداد المركبة الحالي"},{status:400});
+    const distanceKm=kmEnd==null?0:kmEnd-kmStart;
     const entries: [string, unknown][] = [
       ["incident_number",body.incidentNumber],["incident_code",body.incidentCode],["beneficiary_name",body.beneficiaryName],["gender",body.gender],["contact",body.contact],["age",body.age?Number(body.age):null],
       ["urgency",body.urgency],["category",body.category],["case_type",body.caseType],["pickup_type",body.pickupType],["pickup_location",body.pickupLocation],["pickup_governorate",body.pickupGovernorate],
@@ -109,6 +111,7 @@ export async function POST(request: NextRequest) {
     const stmt = env.DB.prepare(`INSERT INTO incidents (${entries.map(([k])=>k).join(",")}) VALUES (${entries.map(()=>"?").join(",")})`);
     const values = entries.map(([,v])=>clean(v));
     const result = await stmt.bind(...values).run();
+    if (chosenVehicle && kmEnd!=null) await env.DB.prepare("UPDATE vehicles SET mileage_km=? WHERE id=?").bind(kmEnd,chosenVehicle.id).run();
     await env.DB.prepare(
       "INSERT INTO audit_logs (actor, action, entity_type, entity_id, details) VALUES (?, 'create', 'incident', ?, ?)",
     )
@@ -170,23 +173,26 @@ export async function PATCH(request: NextRequest) {
     );
   const responseMinutes = minutesBetweenDates(body.callDate, body.dispatchTime || body.callTime, body.callDate, body.arrivalTime);
   const serviceMinutes = minutesBetweenDates(body.callDate, body.callTime, body.callDate, body.clearTime);
-  const kmStart = Number(body.kmStart || 0),
-    kmEnd = Number(body.kmEnd || 0);
-  const chosenVehicle = body.vehicle ? await env.DB.prepare("SELECT v.id FROM vehicles v JOIN stations s ON s.id=v.station_id WHERE v.plate_number=? AND s.name=?").bind(body.vehicle,body.station).first<{id:number}>() : null;
+  let kmStart = 0;
+  const kmEnd = body.kmEnd === "" || body.kmEnd == null ? null : Number(body.kmEnd);
+  const chosenVehicle = body.vehicle ? await env.DB.prepare("SELECT v.id,v.mileage_km FROM vehicles v JOIN stations s ON s.id=v.station_id WHERE v.plate_number=? AND s.name=?").bind(body.vehicle,body.station).first<{id:number;mileage_km:number|null}>() : null;
   if (body.vehicle && !chosenVehicle) return NextResponse.json({error:"المركبة لا تتبع المحطة المختارة"},{status:400});
+  kmStart=chosenVehicle?Number(chosenVehicle.mileage_km||0):0;
+  if (kmEnd!=null && (!Number.isFinite(kmEnd) || kmEnd<kmStart)) return NextResponse.json({error:"عداد النهاية يجب أن يساوي أو يزيد عن عداد المركبة الحالي"},{status:400});
   const updates: [string,unknown][] = [
     ["beneficiary_name",body.beneficiaryName],["gender",body.gender],["contact",body.contact],["age",body.age?Number(body.age):null],["urgency",body.urgency],["category",body.category],["case_type",body.caseType],
     ["pickup_type",body.pickupType],["pickup_location",body.pickupLocation],["pickup_governorate",body.pickupGovernorate],["pickup_municipality",body.pickupMunicipality],["pickup_neighborhood",body.pickupNeighborhood],
     ["dropoff_type",body.dropoffType],["dropoff_location",body.dropoffLocation],["station",body.station],["shift",body.shift],["vehicle",body.vehicle],["vehicle_id",chosenVehicle?.id||null],
     ["call_date",body.callDate],["call_time",body.callTime],["dispatch_date",body.dispatchTime?body.callDate:null],["dispatch_time",body.dispatchTime],["on_scene_date",body.arrivalTime?body.callDate:null],["arrival_time",body.arrivalTime],
     ["hospital_date",body.hospitalTime?body.callDate:null],["hospital_time",body.hospitalTime],["available_date",body.clearTime?body.callDate:null],["clear_time",body.clearTime],
-    ["km_start",kmStart||null],["km_end",kmEnd||null],["distance_km",kmEnd>=kmStart?kmEnd-kmStart:0],["response_minutes",responseMinutes],["service_minutes",serviceMinutes],
+    ["km_start",chosenVehicle?kmStart:null],["km_end",kmEnd],["distance_km",kmEnd==null?0:kmEnd-kmStart],["response_minutes",responseMinutes],["service_minutes",serviceMinutes],
     ["dispatcher_primary",body.dispatcherPrimary],["dispatcher_secondary",body.dispatcherSecondary],["emt_driver",body.emtDriver],["emt_lead",body.emtLead],["emt_assist",body.emtAssist],
     ["chief_complaint",body.chiefComplaint],["fuel_liters",Number(body.fuelLiters||0)],["notes",body.notes],
     ...["cancelled","patientDeceased","conflictRelated","oxygen","bvm","airway","cpr","aed","drugs","woundCare","tourniquet","immobilization","cervicalCollar","glucoseCheck","splinting","delivery"].map((k)=>[k.replace(/[A-Z]/g,m=>`_${m.toLowerCase()}`), (k==="patientDeceased"&&body.category==="Martyr")||(k==="delivery"&&body.category==="Delivery")||body[k]?1:0] as [string,unknown]),
   ];
   await env.DB.prepare(`UPDATE incidents SET ${updates.map(([k])=>`${k}=?`).join(",")},approval_status='pending',approved_by=NULL,approved_at=NULL,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
     .bind(...updates.map(([,v])=>clean(v)),body.id).run();
+  if (chosenVehicle && kmEnd!=null) await env.DB.prepare("UPDATE vehicles SET mileage_km=? WHERE id=?").bind(kmEnd,chosenVehicle.id).run();
   await env.DB.prepare(
     "INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,'update','incident',?,?)",
   )

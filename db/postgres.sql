@@ -64,6 +64,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_email ON user_profiles(lower
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_username ON user_profiles(lower(username)) WHERE username IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_auth_sessions_expiry ON auth_sessions(expires_at);
 
+-- Keep one authoritative odometer reading per vehicle, seeded from all existing logs.
+UPDATE vehicles v SET mileage_km=GREATEST(
+  COALESCE(v.mileage_km,0),
+  COALESCE((SELECT MAX(i.km_end) FROM incidents i WHERE i.vehicle_id=v.id),0),
+  COALESCE((SELECT MAX(m.km_end) FROM vehicle_movements m WHERE m.vehicle_id=v.id),0),
+  COALESCE((SELECT MAX(f.odometer_km) FROM fuel_fillings f WHERE f.vehicle_id=v.id),0)
+);
+
 -- Merge duplicate employee names safely. The oldest record is retained and all
 -- operational, movement and fuel references are redirected before deletion.
 WITH duplicates AS (
