@@ -1982,6 +1982,11 @@ function OperationalCapacity({ data }: { data: any }) {
       (!stationFilter || String(x.station_id) === stationFilter) &&
       (!shiftFilter || x.shift === shiftFilter),
   );
+  const shiftCountByStaff = visibleItems.reduce((counts: Record<string, number>, item: any) => {
+    const key = String(item.staff_id);
+    counts[key] = (counts[key] || 0) + 1;
+    return counts;
+  }, {});
   const present = visibleItems.filter((x) => x.attendance_status === "حاضر");
   return (
     <div className="page-stack capacity-page">
@@ -2254,6 +2259,7 @@ function OperationalCapacity({ data }: { data: any }) {
                 <th>التاريخ</th>
                 <th>المركز</th>
                 <th>الوردية</th>
+                <th>عدد الشفتات</th>
                 <th>المهمة</th>
                 <th>المركبة</th>
                 <th>الحالة</th>
@@ -2274,6 +2280,7 @@ function OperationalCapacity({ data }: { data: any }) {
                   <td>
                     <span className={`shift-badge shift-${String(x.shift).toLowerCase()}`}>{x.shift}</span>
                   </td>
+                  <td><span className="shift-count"><b>{shiftCountByStaff[String(x.staff_id)]||0}</b><small>شفت</small></span></td>
                   <td><span className="capacity-duty">{x.duty_type}</span></td>
                   <td>{x.vehicle_number?<span className="capacity-vehicle"><Ambulance/>{x.vehicle_number}</span>:<span className="capacity-empty">دون مركبة</span>}</td>
                   <td>
@@ -2306,7 +2313,7 @@ function OperationalCapacity({ data }: { data: any }) {
                   </td>
                 </tr>
               ))}
-              {!visibleItems.length&&<tr><td colSpan={9}><Empty/></td></tr>}
+              {!visibleItems.length&&<tr><td colSpan={10}><Empty/></td></tr>}
             </tbody>
           </table>
           {!items.length && <Empty />}

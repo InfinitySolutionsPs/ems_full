@@ -1996,6 +1996,9 @@ tbody tr:hover {
 .shift-badge.shift-a { color:#176d9f; background:#eaf6fd; }
 .shift-badge.shift-b { color:#9d1830; background:#fff0f2; }
 .shift-badge.shift-c { color:#75519b; background:#f5effb; }
+.shift-count { min-width:58px; display:inline-flex; align-items:baseline; justify-content:center; gap:4px; padding:7px 10px; border-radius:10px; background:#eef6ff; color:#24648f; }
+.shift-count b { font-size:15px; line-height:1; }
+.shift-count small { font-size:8px; font-weight:800; }
 .capacity-duty { display:inline-flex; padding:6px 9px; border-radius:9px; background:#f2f4f7; color:#59616d; font-weight:700; white-space:nowrap; }
 .capacity-vehicle { display:inline-flex; align-items:center; gap:6px; direction:ltr; font-weight:800; color:#2c6450; white-space:nowrap; }
 .capacity-vehicle svg { width:16px; color:#1d9a60; }
