@@ -1693,12 +1693,21 @@ function Approvals({
 }
 
 function UsersView({ users, reload }: { users: any[]; reload: () => void }) {
-  const permissionOptions = [
-    ["dashboard.view","عرض لوحة المؤشرات"],["incidents.view","عرض البلاغات"],["incidents.create","إضافة البلاغات"],["incidents.edit","تعديل البلاغات"],["incidents.delete","حذف البلاغات"],
-    ["capacity.view","عرض القدرة التشغيلية"],["capacity.manage","إدارة القدرة التشغيلية"],["coordination.view","عرض التنسيقات"],["coordination.manage","إدارة التنسيقات"],
-    ["fleet.view","عرض المركبات والوقود"],["fleet.manage","إدارة المركبات والوقود"],["maintenance.view","عرض الصيانة"],["maintenance.manage","إدارة الصيانة"],
-    ["approvals.manage","اعتماد الإحصائيات"],["reports.view","عرض وتصدير التقارير"],["users.manage","إدارة المستخدمين"],["settings.manage","إدارة الإعدادات"],
+  const permissionGroups = [
+    {title:"لوحة المؤشرات والتقارير",icon:BarChart3,items:[["dashboard.view","عرض لوحة المؤشرات"],["reports.view","عرض وتصدير التقارير"]]},
+    {title:"البلاغات والإحصائيات",icon:ClipboardList,items:[["incidents.view","عرض البلاغات"],["incidents.create","إضافة البلاغات"],["incidents.edit","تعديل البلاغات"],["incidents.delete","حذف البلاغات"],["approvals.manage","اعتماد الإحصائيات"]]},
+    {title:"القدرة والتنسيقات",icon:Gauge,items:[["capacity.view","عرض القدرة التشغيلية"],["capacity.manage","إدارة القدرة التشغيلية"],["coordination.view","عرض التنسيقات"],["coordination.manage","إدارة التنسيقات"]]},
+    {title:"الأسطول والصيانة",icon:Ambulance,items:[["fleet.view","عرض المركبات والوقود"],["fleet.manage","إدارة المركبات والوقود"],["maintenance.view","عرض الصيانة"],["maintenance.manage","إدارة الصيانة"]]},
+    {title:"إدارة النظام",icon:Settings,items:[["users.manage","إدارة المستخدمين"],["settings.manage","إدارة الإعدادات"]]},
   ];
+  const allPermissions=permissionGroups.flatMap(group=>group.items.map(([code])=>code));
+  const rolePresets:Record<string,string[]>={
+    admin:["*"],
+    central_user:allPermissions.filter(code=>code!=="users.manage"),
+    station_user:["dashboard.view","incidents.view","incidents.create","capacity.view","fleet.view","maintenance.view"],
+    viewer:["dashboard.view","incidents.view","reports.view"],
+    custom:[],
+  };
   const [open, setOpen] = useState(false),
     [editingId, setEditingId] = useState<number | null>(null),
     [draft, setDraft] = useState<any>({
@@ -1785,80 +1794,26 @@ function UsersView({ users, reload }: { users: any[]; reload: () => void }) {
         </button>
       </section>
       {open && (
-        <form className="panel user-form" onSubmit={save}>
+        <form className="panel user-form user-editor" onSubmit={save}>
           <div className="user-form-heading">
-            <b>{editingId ? "تعديل المستخدم" : "إضافة مستخدم جديد"}</b>
-            <span>
-              {editingId
-                ? "عدّلي بيانات الحساب وصلاحيته ونطاق عمله"
-                : "أدخل بيانات الحساب وحدد نطاق عمله"}
-            </span>
+            <div className="user-heading-icon"><UserCog/></div><div><b>{editingId ? "تعديل المستخدم" : "إضافة مستخدم جديد"}</b><span>{editingId ? "عدّل بيانات الحساب ونطاق الوصول والصلاحيات" : "أنشئ الحساب وحدد صلاحياته بحسب طبيعة العمل"}</span></div>
+            <button type="button" className="user-close" onClick={()=>{setOpen(false);setEditingId(null)}}><X/></button>
           </div>
-          <label>
-            الاسم الكامل
-            <input
-              required
-              value={draft.fullName}
-              onChange={(e) => setDraft({ ...draft, fullName: e.target.value })}
-            />
-          </label>
-          <label>
-            اسم المستخدم
-            <input required value={draft.username} onChange={(e) => setDraft({ ...draft, username: e.target.value })}/>
-          </label>
-          <label>
-            البريد الإلكتروني
-            <input
-              type="email"
-              value={draft.email}
-              onChange={(e) => setDraft({ ...draft, email: e.target.value })}
-            />
-          </label>
-          <label>
-            {editingId ? "كلمة مرور جديدة (اختياري)" : "كلمة المرور"}
-            <input required={!editingId} minLength={8} type="password" value={draft.password} onChange={(e)=>setDraft({...draft,password:e.target.value})}/>
-          </label>
-          <label>
-            الصلاحية
-            <select
-              value={draft.role}
-              onChange={(e) => setDraft({ ...draft, role: e.target.value })}
-            >
-              <option value="custom">صلاحيات مخصصة</option>
-              <option value="station_user">مدخل محطة</option>
-              <option value="central_user">موظف مركزي</option>
-              <option value="viewer">مشاهد تقارير</option>
-              <option value="admin">مدير النظام</option>
-            </select>
-          </label>
-          <fieldset className="permission-picker"><legend>صلاحيات الواجهات والإجراءات</legend>{permissionOptions.map(([code,label])=><label key={code}><input type="checkbox" checked={draft.permissions.includes(code)} onChange={(e)=>setDraft({...draft,permissions:e.target.checked?[...draft.permissions,code]:draft.permissions.filter((p:string)=>p!==code)})}/><span>{label}</span></label>)}</fieldset>
-          <label>
-            المحطة
-            <select
-              value={draft.station}
-              onChange={(e) => setDraft({ ...draft, station: e.target.value })}
-            >
-              <option value="">كل المحطات</option>
-              {stations.map((x) => (
-                <option key={x}>{x}</option>
-              ))}
-            </select>
-          </label>
-          <button className="primary">
-            <Save /> {editingId ? "حفظ التعديلات" : "حفظ المستخدم"}
-          </button>
-          {editingId && (
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => {
-                setOpen(false);
-                setEditingId(null);
-              }}
-            >
-              <X /> إلغاء
-            </button>
-          )}
+          <section className="user-editor-section"><div className="user-section-title"><span>1</span><div><b>بيانات الحساب</b><small>البيانات الأساسية المستخدمة لتسجيل الدخول</small></div></div><div className="user-fields-grid">
+            <label>الاسم الكامل<input required placeholder="الاسم الرباعي" value={draft.fullName} onChange={(e)=>setDraft({...draft,fullName:e.target.value})}/></label>
+            <label>اسم المستخدم<input required placeholder="مثال: ahmad.ali" value={draft.username} onChange={(e)=>setDraft({...draft,username:e.target.value})}/></label>
+            <label>البريد الإلكتروني <em>اختياري</em><input type="email" placeholder="name@example.com" value={draft.email} onChange={(e)=>setDraft({...draft,email:e.target.value})}/></label>
+            <label>{editingId?"كلمة مرور جديدة":"كلمة المرور"} <em>{editingId?"اختياري":"8 أحرف على الأقل"}</em><input required={!editingId} minLength={8} type="password" placeholder={editingId?"اتركها فارغة دون تغيير":"••••••••"} value={draft.password} onChange={(e)=>setDraft({...draft,password:e.target.value})}/></label>
+          </div></section>
+          <section className="user-editor-section"><div className="user-section-title"><span>2</span><div><b>الدور ونطاق الوصول</b><small>اختيار الدور يطبق مجموعة صلاحيات مقترحة ويمكن تعديلها</small></div></div><div className="user-fields-grid access-grid">
+            <label>الدور الوظيفي<select value={draft.role} onChange={(e)=>{const role=e.target.value;setDraft({...draft,role,permissions:rolePresets[role]||[]})}}><option value="custom">صلاحيات مخصصة</option><option value="station_user">مدخل محطة</option><option value="central_user">موظف مركزي</option><option value="viewer">مشاهد تقارير</option><option value="admin">مدير النظام</option></select></label>
+            <label>نطاق المحطة<select value={draft.station} onChange={(e)=>setDraft({...draft,station:e.target.value})}><option value="">كل المحطات</option>{stations.map((x)=><option key={x}>{x}</option>)}</select></label>
+            <div className="access-summary"><ShieldCheck/><div><b>{draft.role==="admin"?"صلاحية كاملة":`${draft.permissions.filter((p:string)=>p!=="*").length} صلاحيات محددة`}</b><span>{draft.station||"الوصول إلى جميع المحطات"}</span></div></div>
+          </div></section>
+          <section className="user-editor-section permission-section"><div className="permission-head"><div className="user-section-title"><span>3</span><div><b>صلاحيات الواجهات والإجراءات</b><small>حدد ما يمكن للمستخدم مشاهدته أو إدارته</small></div></div><div className="permission-actions"><button type="button" onClick={()=>setDraft({...draft,role:"custom",permissions:allPermissions})}>تحديد الكل</button><button type="button" onClick={()=>setDraft({...draft,role:"custom",permissions:[]})}>إلغاء الكل</button></div></div>
+            <div className="permission-groups">{permissionGroups.map(group=><fieldset className="permission-group" key={group.title}><legend><group.icon/>{group.title}</legend>{group.items.map(([code,label])=><label key={code} className={draft.permissions.includes("*")||draft.permissions.includes(code)?"selected":""}><input type="checkbox" disabled={draft.permissions.includes("*")} checked={draft.permissions.includes("*")||draft.permissions.includes(code)} onChange={(e)=>setDraft({...draft,role:"custom",permissions:e.target.checked?[...draft.permissions.filter((p:string)=>p!=="*"),code]:draft.permissions.filter((p:string)=>p!==code&&p!=="*")})}/><span>{label}</span><i/></label>)}</fieldset>)}</div>
+          </section>
+          <footer className="user-form-actions"><div><ShieldCheck/><span>سيتم تطبيق الصلاحيات فور حفظ الحساب</span></div><button type="button" className="ghost" onClick={()=>{setOpen(false);setEditingId(null)}}><X/> إلغاء</button><button className="primary"><Save/>{editingId?"حفظ التعديلات":"إنشاء المستخدم"}</button></footer>
         </form>
       )}
       <section className="panel table-panel">
