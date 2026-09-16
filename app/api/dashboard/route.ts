@@ -4,7 +4,7 @@ import { getAccess,hasPermission } from "@/lib/access";
 import { ensureDataSheetImported } from "@/lib/datasheet-import";
 
 export async function GET(request: NextRequest) {
-  await ensureDataSheetImported(env.DB).catch(() => ({ imported: 0, total: 0 }));
+  const archiveImport = await ensureDataSheetImported(env.DB).catch((error) => ({ imported:0,existing:0,failed:0,total:0,errors:[error instanceof Error?error.message:String(error)] }));
   const access=await getAccess(request); if(!hasPermission(access.profile,"dashboard.view"))return NextResponse.json({error:"لا توجد صلاحية لعرض المؤشرات"},{status:403});
   const url = new URL(request.url);
   const from = url.searchParams.get("from") || "1900-01-01";
@@ -25,5 +25,5 @@ export async function GET(request: NextRequest) {
     env.DB.prepare(`SELECT station name, COUNT(*) incidents, ROUND(SUM(distance_km)::numeric,1) distance, ROUND(AVG(NULLIF(response_minutes,0))::numeric,1) response FROM incidents WHERE ${where} GROUP BY station ORDER BY incidents DESC`).bind(...args),
   ];
   const [summary, governorates, categories, timeline, cases, stations] = await env.DB.batch(queries);
-  return NextResponse.json({ summary: summary.results[0] || {}, governorates: governorates.results, categories: categories.results, timeline: timeline.results, cases: cases.results, stations: stations.results });
+  return NextResponse.json({ summary: summary.results[0] || {}, governorates: governorates.results, categories: categories.results, timeline: timeline.results, cases: cases.results, stations: stations.results, archiveImport });
 }

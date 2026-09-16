@@ -20,7 +20,7 @@ const minutesBetweenDates = (ad?: unknown, at?: unknown, bd?: unknown, bt?: unkn
 };
 
 export async function GET(request: NextRequest) {
-  await ensureDataSheetImported(env.DB).catch(() => ({ imported: 0, total: 0 }));
+  const archiveImport = await ensureDataSheetImported(env.DB).catch((error) => ({ imported:0,existing:0,failed:0,total:0,errors:[error instanceof Error?error.message:String(error)] }));
   const access = await getAccess(request);
   if (!hasPermission(access.profile,"incidents.view")) return NextResponse.json({ error: "لا توجد صلاحية لعرض البلاغات" }, { status: 403 });
   const url = new URL(request.url);
@@ -46,7 +46,7 @@ export async function GET(request: NextRequest) {
   const result = await env.DB.prepare(sql)
     .bind(...args)
     .all();
-  return NextResponse.json({ incidents: result.results });
+  return NextResponse.json({ incidents: result.results, archiveImport });
 }
 
 export async function POST(request: NextRequest) {

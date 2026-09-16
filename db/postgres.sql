@@ -24,6 +24,25 @@ CREATE TABLE IF NOT EXISTS incidents (
  fuel_liters DOUBLE PRECISION NOT NULL DEFAULT 0, notes TEXT, approval_status TEXT NOT NULL DEFAULT 'approved', approved_by TEXT, approved_at TIMESTAMPTZ, rejection_reason TEXT, created_by TEXT,
  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+-- Upgrade databases created by earlier EMS releases without deleting data.
+-- CREATE TABLE IF NOT EXISTS does not add newly introduced columns.
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS incident_code TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS beneficiary_name TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS response_minutes INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS service_minutes INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS source_import_key TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS source_incident_number TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS source_incident_code TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS import_batch TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS data_quality_status TEXT NOT NULL DEFAULT 'ok';
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS data_quality_notes TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS approval_status TEXT NOT NULL DEFAULT 'approved';
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS approved_by TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS approved_at TIMESTAMPTZ;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS rejection_reason TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS created_by TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_incidents_source_import_key ON incidents(source_import_key) WHERE source_import_key IS NOT NULL;
 CREATE TABLE IF NOT EXISTS operational_assignments (id BIGSERIAL PRIMARY KEY, work_date TEXT NOT NULL, staff_id BIGINT NOT NULL REFERENCES staff(id), station_id BIGINT NOT NULL REFERENCES stations(id), shift TEXT NOT NULL, duty_type TEXT NOT NULL DEFAULT 'دوام مركز', vehicle_id BIGINT REFERENCES vehicles(id), work_location TEXT, attendance_status TEXT NOT NULL DEFAULT 'حاضر', notes TEXT, created_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS coordinations (id BIGSERIAL PRIMARY KEY, source_key TEXT UNIQUE, sequence_number INTEGER, coordination_date TEXT NOT NULL, coordinating_agency TEXT NOT NULL, vehicle_count INTEGER NOT NULL DEFAULT 0, coordination_type TEXT NOT NULL, result_description TEXT, ambulance_patients INTEGER NOT NULL DEFAULT 0, ambulance_companions INTEGER NOT NULL DEFAULT 0, bus_patients INTEGER NOT NULL DEFAULT 0, coordination_status TEXT NOT NULL DEFAULT 'نجح', participating_vehicles TEXT, notes_patients INTEGER NOT NULL DEFAULT 0, notes_companions INTEGER NOT NULL DEFAULT 0, notes_total INTEGER NOT NULL DEFAULT 0, notes TEXT, created_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS fuel_fillings (id BIGSERIAL PRIMARY KEY, vehicle_id BIGINT NOT NULL REFERENCES vehicles(id), incident_id BIGINT REFERENCES incidents(id), filled_at TEXT NOT NULL, liters DOUBLE PRECISION NOT NULL, fuel_type TEXT NOT NULL, odometer_km DOUBLE PRECISION, driver_staff_id BIGINT REFERENCES staff(id), driver_name TEXT, filled_by_staff_id BIGINT REFERENCES staff(id), filled_by_name TEXT NOT NULL, source_name TEXT, voucher_number TEXT, notes TEXT, created_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
