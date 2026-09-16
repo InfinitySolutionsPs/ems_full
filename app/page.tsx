@@ -1967,7 +1967,7 @@ function OperationalCapacity({ data }: { data: any }) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
   const deleteAssignment = async (id: number) => {
-    if (!confirm("هل تريدين حذف هذا التكليف؟")) return;
+    if (!confirm("هل تريد حذف هذا التكليف؟")) return;
     const r = await fetch(`/api/operational-capacity?id=${id}`, {
       method: "DELETE",
     });
@@ -2246,20 +2246,18 @@ function OperationalCapacity({ data }: { data: any }) {
             طباعة PDF
           </button>
         </div>
-        <div className="table-wrap">
-          <table>
+        <div className="capacity-table-wrap table-wrap">
+          <table className="capacity-table">
             <thead>
               <tr>
                 <th>الموظف</th>
                 <th>التاريخ</th>
-                <th>الكادر</th>
-                <th>الوظيفة</th>
-                <th>التفصيل</th>
                 <th>المركز</th>
                 <th>الوردية</th>
                 <th>المهمة</th>
                 <th>المركبة</th>
                 <th>الحالة</th>
+                <th>ملاحظات</th>
                 <th>إجراء</th>
               </tr>
             </thead>
@@ -2267,21 +2265,17 @@ function OperationalCapacity({ data }: { data: any }) {
               {visibleItems.map((x) => (
                 <tr key={x.id}>
                   <td>
-                    <b>{x.full_name}</b>
+                    <div className="capacity-person"><span>{String(x.full_name||"").trim().charAt(0)||"م"}</span><div><b>{x.full_name}</b><small>{x.job_title||x.cadre_type||"غير مصنف"}{x.job_title&&x.cadre_type?` · ${x.cadre_type}`:""}</small></div></div>
                   </td>
-                  <td>{x.work_date}</td>
-                  <td>{x.cadre_type}</td>
-                  <td>{x.job_title || "—"}</td>
-                  <td>{x.detail || "—"}</td>
+                  <td><time className="capacity-day">{x.work_date}</time></td>
                   <td>
-                    {x.station_name}
-                    <small className="cell-note">{x.work_location || ""}</small>
+                    <div className="capacity-station"><b>{x.station_name}</b><small>{x.work_location||"المركز الرئيسي"}</small></div>
                   </td>
                   <td>
-                    <span className="shift-badge">{x.shift}</span>
+                    <span className={`shift-badge shift-${String(x.shift).toLowerCase()}`}>{x.shift}</span>
                   </td>
-                  <td>{x.duty_type}</td>
-                  <td>{x.vehicle_number || "—"}</td>
+                  <td><span className="capacity-duty">{x.duty_type}</span></td>
+                  <td>{x.vehicle_number?<span className="capacity-vehicle"><Ambulance/>{x.vehicle_number}</span>:<span className="capacity-empty">دون مركبة</span>}</td>
                   <td>
                     <span
                       className={
@@ -2293,6 +2287,7 @@ function OperationalCapacity({ data }: { data: any }) {
                       {x.attendance_status}
                     </span>
                   </td>
+                  <td><span className="capacity-notes" title={x.notes||""}>{x.notes||"—"}</span></td>
                   <td>
                     <div className="row-actions">
                       <button
@@ -2311,6 +2306,7 @@ function OperationalCapacity({ data }: { data: any }) {
                   </td>
                 </tr>
               ))}
+              {!visibleItems.length&&<tr><td colSpan={9}><Empty/></td></tr>}
             </tbody>
           </table>
           {!items.length && <Empty />}

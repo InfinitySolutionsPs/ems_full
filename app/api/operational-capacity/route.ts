@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
     new Date().toISOString().slice(0, 10);
   const to = request.nextUrl.searchParams.get("to") || date || from;
   const result = await env.DB.prepare(
-    `SELECT oa.*, s.full_name, s.cadre_type, s.job_title, s.detail,
+    `SELECT oa.*, s.full_name, s.cadre_type, s.job_title,
     st.name station_name, v.plate_number vehicle_number
     FROM operational_assignments oa JOIN staff s ON s.id=oa.staff_id
     JOIN stations st ON st.id=oa.station_id LEFT JOIN vehicles v ON v.id=oa.vehicle_id
