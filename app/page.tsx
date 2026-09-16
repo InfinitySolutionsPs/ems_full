@@ -868,7 +868,9 @@ function IncidentForm({
   const selectedCenterId = Number(form.center || 0);
   const availableStations = (stationsData || []).filter((s:any) => !selectedCenterId || Number(s.center_id) === selectedCenterId);
   const selectedStation = (stationsData || []).find((s:any) => s.name === form.station);
-  const availableVehicles = (vehicles || []).filter((v:any) => v.active !== 0 && (!selectedCenterId || Number(v.center_id) === selectedCenterId) && (!selectedStation || Number(v.station_id) === Number(selectedStation.id)));
+  const availableVehicles = selectedStation
+    ? (vehicles || []).filter((v:any) => v.active !== 0 && Number(v.station_id) === Number(selectedStation.id))
+    : [];
   const field = (
     name: string,
     label: string,
@@ -989,7 +991,7 @@ function IncidentForm({
           <label>المركز <em>*</em><select required value={form.center} onChange={e=>{setField("center",e.target.value);setField("station","");setField("vehicle","");}}><option value="">اختر المركز...</option>{(centers||[]).filter((c:any)=>c.active!==0).map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
           <label>المحطة <em>*</em><select required disabled={!form.center} value={form.station} onChange={e=>{setField("station",e.target.value);setField("vehicle","");}}><option value="">{form.center?"اختر المحطة...":"اختر المركز أولًا"}</option>{availableStations.filter((s:any)=>s.active!==0).map((s:any)=><option key={s.id} value={s.name}>{s.name}</option>)}</select></label>
           {select("shift", "الوردية", ["A", "B", "C"], true)}
-          <label>رقم المركبة<select disabled={!form.center} value={form.vehicle} onChange={e=>setField("vehicle",e.target.value)}><option value="">بدون مركبة</option>{form.vehicle && !(vehicles||[]).some((v:any)=>v.plate_number===form.vehicle) && <option value={form.vehicle}>{form.vehicle} (رقم سابق)</option>}{availableVehicles.map((v:any)=><option key={v.id} value={v.plate_number}>{v.plate_number} — {v.fuel_type||"وقود غير محدد"}</option>)}</select></label>
+          <label>رقم المركبة<select disabled={!selectedStation} value={form.vehicle} onChange={e=>setField("vehicle",e.target.value)}><option value="">{!selectedStation?"اختر المحطة أولًا":availableVehicles.length?"بدون مركبة":"لا توجد مركبات مرتبطة بالمحطة"}</option>{form.vehicle && !(vehicles||[]).some((v:any)=>v.plate_number===form.vehicle) && <option value={form.vehicle}>{form.vehicle} (رقم سابق)</option>}{availableVehicles.map((v:any)=><option key={v.id} value={v.plate_number}>{v.plate_number} — {v.fuel_type||"وقود غير محدد"}</option>)}</select></label>
           {field("crew", "أفراد الطاقم")}
           {field("kmStart", "عداد البداية", "number")}
           {field("kmEnd", "عداد النهاية", "number")}

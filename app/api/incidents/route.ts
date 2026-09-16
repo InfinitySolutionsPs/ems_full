@@ -92,8 +92,8 @@ export async function POST(request: NextRequest) {
   const serviceMinutes = minutesBetweenDates(body.callDate, body.callTime, body.callDate, body.clearTime);
   const actor = access.email || "system";
   try {
-    const chosenVehicle = body.vehicle ? await env.DB.prepare("SELECT id FROM vehicles WHERE plate_number=? AND active=1").bind(body.vehicle).first<{id:number}>() : null;
-    if (body.vehicle && !chosenVehicle) return NextResponse.json({error:"المركبة غير معتمدة أو خارج الخدمة"},{status:400});
+    const chosenVehicle = body.vehicle ? await env.DB.prepare("SELECT v.id FROM vehicles v JOIN stations s ON s.id=v.station_id WHERE v.plate_number=? AND v.active=1 AND s.name=?").bind(body.vehicle,body.station).first<{id:number}>() : null;
+    if (body.vehicle && !chosenVehicle) return NextResponse.json({error:"المركبة لا تتبع المحطة المختارة أو أنها خارج الخدمة"},{status:400});
     const entries: [string, unknown][] = [
       ["incident_number",body.incidentNumber],["incident_code",body.incidentCode],["beneficiary_name",body.beneficiaryName],["gender",body.gender],["contact",body.contact],["age",body.age?Number(body.age):null],
       ["urgency",body.urgency],["category",body.category],["case_type",body.caseType],["pickup_type",body.pickupType],["pickup_location",body.pickupLocation],["pickup_governorate",body.pickupGovernorate],
@@ -172,8 +172,8 @@ export async function PATCH(request: NextRequest) {
   const serviceMinutes = minutesBetweenDates(body.callDate, body.callTime, body.callDate, body.clearTime);
   const kmStart = Number(body.kmStart || 0),
     kmEnd = Number(body.kmEnd || 0);
-  const chosenVehicle = body.vehicle ? await env.DB.prepare("SELECT id FROM vehicles WHERE plate_number=?").bind(body.vehicle).first<{id:number}>() : null;
-  if (body.vehicle && !chosenVehicle && body.vehicle!==current.vehicle) return NextResponse.json({error:"المركبة غير موجودة في الإعدادات"},{status:400});
+  const chosenVehicle = body.vehicle ? await env.DB.prepare("SELECT v.id FROM vehicles v JOIN stations s ON s.id=v.station_id WHERE v.plate_number=? AND s.name=?").bind(body.vehicle,body.station).first<{id:number}>() : null;
+  if (body.vehicle && !chosenVehicle) return NextResponse.json({error:"المركبة لا تتبع المحطة المختارة"},{status:400});
   const updates: [string,unknown][] = [
     ["beneficiary_name",body.beneficiaryName],["gender",body.gender],["contact",body.contact],["age",body.age?Number(body.age):null],["urgency",body.urgency],["category",body.category],["case_type",body.caseType],
     ["pickup_type",body.pickupType],["pickup_location",body.pickupLocation],["pickup_governorate",body.pickupGovernorate],["pickup_municipality",body.pickupMunicipality],["pickup_neighborhood",body.pickupNeighborhood],
