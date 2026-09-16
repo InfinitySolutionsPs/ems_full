@@ -25,9 +25,9 @@ export async function GET(request: NextRequest) {
   const to = request.nextUrl.searchParams.get("to") || date || from;
   const result = await env.DB.prepare(
     `SELECT oa.*, s.full_name, s.cadre_type, s.job_title,
-    st.name station_name, v.plate_number vehicle_number
+    st.name station_name, st.center_id, c.name center_name, v.plate_number vehicle_number
     FROM operational_assignments oa JOIN staff s ON s.id=oa.staff_id
-    JOIN stations st ON st.id=oa.station_id LEFT JOIN vehicles v ON v.id=oa.vehicle_id
+    JOIN stations st ON st.id=oa.station_id LEFT JOIN centers c ON c.id=st.center_id LEFT JOIN vehicles v ON v.id=oa.vehicle_id
     WHERE oa.work_date BETWEEN ? AND ? ORDER BY oa.work_date DESC, st.name, oa.shift, s.full_name`,
   )
     .bind(from, to)
@@ -50,6 +50,9 @@ export async function PATCH(request: NextRequest) {
       { error: "يرجى استكمال البيانات الإلزامية" },
       { status: 400 },
     );
+  const links = await env.DB.prepare("SELECT s.center_id staff_center,st.center_id station_center FROM staff s CROSS JOIN stations st WHERE s.id=? AND st.id=?").bind(b.staffId,b.stationId).first<any>();
+  if (!links || !links.staff_center || links.staff_center!==links.station_center) return NextResponse.json({error:"الموظف لا يتبع المركز المرتبط بالمحطة المختارة"},{status:400});
+  if (b.vehicleId) { const vehicle=await env.DB.prepare("SELECT station_id FROM vehicles WHERE id=? AND active=1").bind(b.vehicleId).first<any>(); if(!vehicle||vehicle.station_id!==Number(b.stationId)) return NextResponse.json({error:"المركبة لا تتبع المحطة المختارة أو أنها خارج الخدمة"},{status:400}); }
   await env.DB.prepare(
     `UPDATE operational_assignments SET work_date=?,staff_id=?,station_id=?,shift=?,duty_type=?,vehicle_id=?,work_location=?,attendance_status=?,notes=? WHERE id=?`,
   )
@@ -100,6 +103,9 @@ export async function POST(request: NextRequest) {
       { error: "يرجى استكمال الموظف والمركز والتاريخ والوردية" },
       { status: 400 },
     );
+  const links = await env.DB.prepare("SELECT s.center_id staff_center,st.center_id station_center FROM staff s CROSS JOIN stations st WHERE s.id=? AND st.id=?").bind(b.staffId,b.stationId).first<any>();
+  if (!links || !links.staff_center || links.staff_center!==links.station_center) return NextResponse.json({error:"الموظف لا يتبع المركز المرتبط بالمحطة المختارة"},{status:400});
+  if (b.vehicleId) { const vehicle=await env.DB.prepare("SELECT station_id FROM vehicles WHERE id=? AND active=1").bind(b.vehicleId).first<any>(); if(!vehicle||vehicle.station_id!==Number(b.stationId)) return NextResponse.json({error:"المركبة لا تتبع المحطة المختارة أو أنها خارج الخدمة"},{status:400}); }
   const duplicate = await env.DB.prepare(
     "SELECT id FROM operational_assignments WHERE work_date=? AND staff_id=? AND shift=? LIMIT 1",
   )

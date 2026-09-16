@@ -6,6 +6,7 @@ ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS chassis_number TEXT;
 ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS mileage_km DOUBLE PRECISION;
 ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS usage_status TEXT;
 CREATE TABLE IF NOT EXISTS staff (id BIGSERIAL PRIMARY KEY, full_name TEXT NOT NULL, station_id BIGINT REFERENCES stations(id), qualification TEXT, cadre_type TEXT NOT NULL DEFAULT 'كادر', job_title TEXT, detail TEXT, active INTEGER NOT NULL DEFAULT 1);
+ALTER TABLE staff ADD COLUMN IF NOT EXISTS center_id BIGINT REFERENCES centers(id);
 CREATE TABLE IF NOT EXISTS user_profiles (id BIGSERIAL PRIMARY KEY, external_user_id TEXT UNIQUE, username TEXT, email TEXT, full_name TEXT, password_hash TEXT, role TEXT NOT NULL DEFAULT 'viewer', permissions TEXT NOT NULL DEFAULT '[]', station TEXT, active INTEGER NOT NULL DEFAULT 1, last_login_at TIMESTAMPTZ);
 ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS username TEXT;
 ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS password_hash TEXT;

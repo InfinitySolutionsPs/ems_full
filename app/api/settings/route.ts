@@ -6,6 +6,10 @@ import staffArchive from "@/lib/staff-archive.json";
 
 const employeeNameKey = (value: unknown) =>
   String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
+const centerArabic: Record<string,string> = {
+  "gaza":"غزة", "north gaza":"شمال غزة", "middle area":"الوسطى",
+  "khan yunis":"خانيونس", "rafah":"رفح",
+};
 
 export async function GET(request:NextRequest) {
   const access=await getAccess(request);if(!access.profile)return NextResponse.json({error:"يرجى تسجيل الدخول"},{status:401});
@@ -39,11 +43,23 @@ export async function GET(request:NextRequest) {
   }
   await env.DB.prepare("INSERT INTO centers (name,governorate) SELECT DISTINCT governorate,governorate FROM stations WHERE governorate IS NOT NULL AND trim(governorate)<>'' ON CONFLICT(name) DO NOTHING").run();
   await env.DB.prepare("UPDATE stations SET center_id=(SELECT id FROM centers WHERE centers.name=stations.governorate LIMIT 1) WHERE center_id IS NULL").run();
+  const centerRows = await env.DB.prepare("SELECT id,name FROM centers").all();
+  const centerByName = new Map((centerRows.results as any[]).map((c:any)=>[employeeNameKey(c.name),Number(c.id)]));
+  const staffToLink = await env.DB.prepare("SELECT id,detail,center_id FROM staff").all();
+  for (const person of staffToLink.results as any[]) {
+    let detail:any={}; try { detail=JSON.parse(person.detail||"{}"); } catch {}
+    const translated = centerArabic[employeeNameKey(detail.station)] || String(detail.station||"").trim();
+    const centerId = centerByName.get(employeeNameKey(translated));
+    if (translated && (detail.station!==translated || (!person.center_id && centerId))) {
+      detail.station=translated;
+      await env.DB.prepare("UPDATE staff SET detail=?,center_id=COALESCE(center_id,?) WHERE id=?").bind(JSON.stringify(detail),centerId||null,person.id).run();
+    }
+  }
   const [centers, stations, vehicles, staff, settings] = await env.DB.batch([
     env.DB.prepare("SELECT * FROM centers ORDER BY name"),
     env.DB.prepare("SELECT s.*,c.name center_name FROM stations s LEFT JOIN centers c ON c.id=s.center_id ORDER BY s.name"),
     env.DB.prepare("SELECT v.*,s.center_id,c.name center_name FROM vehicles v LEFT JOIN stations s ON s.id=v.station_id LEFT JOIN centers c ON c.id=s.center_id ORDER BY v.plate_number"),
-    env.DB.prepare("SELECT * FROM staff ORDER BY full_name"),
+    env.DB.prepare("SELECT s.*,c.name center_name FROM staff s LEFT JOIN centers c ON c.id=s.center_id ORDER BY s.full_name"),
     env.DB.prepare("SELECT * FROM system_settings ORDER BY category,key"),
   ]);
   return NextResponse.json({
@@ -70,7 +86,7 @@ export async function PATCH(request: NextRequest) {
     );
   if (b.entity === "staff")
     await env.DB.prepare(
-      "UPDATE staff SET full_name=?,cadre_type=?,job_title=?,detail=?,active=? WHERE id=?",
+      "UPDATE staff SET full_name=?,cadre_type=?,job_title=?,detail=?,active=?,center_id=? WHERE id=?",
     )
       .bind(
         b.fullName,
@@ -78,6 +94,7 @@ export async function PATCH(request: NextRequest) {
         b.jobTitle,
         b.detail || null,
         b.active === false ? 0 : 1,
+        b.centerId ? Number(b.centerId) : null,
         b.id,
       )
       .run();
@@ -190,9 +207,9 @@ export async function POST(request: NextRequest) {
       .run();
   else if (b.entity === "staff")
     await env.DB.prepare(
-      "INSERT INTO staff (full_name,cadre_type,job_title,detail) VALUES (?,?,?,?)",
+      "INSERT INTO staff (full_name,cadre_type,job_title,detail,center_id) VALUES (?,?,?,?,?)",
     )
-      .bind(b.fullName, b.cadreType, b.jobTitle, b.detail || null)
+      .bind(b.fullName, b.cadreType, b.jobTitle, b.detail || null, b.centerId ? Number(b.centerId) : null)
       .run();
   else if (b.entity === "setting")
     await env.DB.prepare(

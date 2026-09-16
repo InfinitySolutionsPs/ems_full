@@ -1914,10 +1914,12 @@ function OperationalCapacity({ data }: { data: any }) {
     [to, setTo] = useState(today);
   const [items, setItems] = useState<any[]>([]);
   const [employeeFilter, setEmployeeFilter] = useState("");
+  const [centerFilter, setCenterFilter] = useState("");
   const [stationFilter, setStationFilter] = useState("");
   const [shiftFilter, setShiftFilter] = useState("");
   const [editingId, setEditingId] = useState<number | null>(null);
   const [draft, setDraft] = useState<any>({
+    centerId: "",
     staffId: "",
     stationId: "",
     shift: "A",
@@ -1948,6 +1950,7 @@ function OperationalCapacity({ data }: { data: any }) {
     );
     setEditingId(null);
     setDraft({
+      centerId: "",
       staffId: "",
       stationId: "",
       shift: "A",
@@ -1963,6 +1966,7 @@ function OperationalCapacity({ data }: { data: any }) {
     setEditingId(x.id);
     setDate(x.work_date);
     setDraft({
+      centerId: String(x.center_id || ""),
       staffId: String(x.staff_id),
       stationId: String(x.station_id),
       shift: x.shift,
@@ -1987,6 +1991,7 @@ function OperationalCapacity({ data }: { data: any }) {
   const visibleItems = items.filter(
     (x) =>
       (!employeeFilter || String(x.staff_id) === employeeFilter) &&
+      (!centerFilter || String(x.center_id) === centerFilter) &&
       (!stationFilter || String(x.station_id) === stationFilter) &&
       (!shiftFilter || x.shift === shiftFilter),
   );
@@ -1996,6 +2001,11 @@ function OperationalCapacity({ data }: { data: any }) {
     return counts;
   }, {});
   const present = visibleItems.filter((x) => x.attendance_status === "حاضر");
+  const filterStations = (data.stations || []).filter((x:any)=>!centerFilter || String(x.center_id)===centerFilter);
+  const filterEmployees = (data.staff || []).filter((x:any)=>!centerFilter || String(x.center_id)===centerFilter);
+  const draftStations = (data.stations || []).filter((x:any)=>String(x.center_id)===String(draft.centerId));
+  const draftEmployees = (data.staff || []).filter((x:any)=>String(x.center_id)===String(draft.centerId));
+  const draftVehicles = (data.vehicles || []).filter((x:any)=>x.active!==0 && String(x.station_id)===String(draft.stationId));
   return (
     <div className="page-stack capacity-page">
       <section className="form-hero">
@@ -2066,21 +2076,26 @@ function OperationalCapacity({ data }: { data: any }) {
             />
           </label>
           <label>
-            الموظف
-            <select value={employeeFilter} onChange={(e) => setEmployeeFilter(e.target.value)}>
-              <option value="">جميع الموظفين</option>
-              {(data.staff || []).map((x: any) => (
-                <option key={x.id} value={x.id}>{x.full_name}</option>
+            المركز
+            <select value={centerFilter} onChange={(e) => {setCenterFilter(e.target.value);setStationFilter("");setEmployeeFilter("");}}>
+              <option value="">جميع المراكز</option>
+              {(data.centers || []).map((x: any) => (
+                <option key={x.id} value={x.id}>{x.name}</option>
               ))}
             </select>
           </label>
           <label>
-            المركز
-            <select value={stationFilter} onChange={(e) => setStationFilter(e.target.value)}>
-              <option value="">جميع المراكز</option>
-              {(data.stations || []).map((x: any) => (
-                <option key={x.id} value={x.id}>{x.name}</option>
-              ))}
+            المحطة
+            <select value={stationFilter} onChange={(e) => setStationFilter(e.target.value)} disabled={!centerFilter}>
+              <option value="">جميع المحطات</option>
+              {filterStations.map((x: any) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            </select>
+          </label>
+          <label>
+            الموظف
+            <select value={employeeFilter} onChange={(e) => setEmployeeFilter(e.target.value)} disabled={!centerFilter}>
+              <option value="">جميع موظفي المركز</option>
+              {filterEmployees.map((x: any) => <option key={x.id} value={x.id}>{x.full_name}</option>)}
             </select>
           </label>
           <label>
@@ -2092,9 +2107,10 @@ function OperationalCapacity({ data }: { data: any }) {
           </label>
           <button type="button" className="ghost capacity-clear" onClick={() => {
             setEmployeeFilter("");
+            setCenterFilter("");
             setStationFilter("");
             setShiftFilter("");
-          }} disabled={!employeeFilter && !stationFilter && !shiftFilter}>
+          }} disabled={!employeeFilter && !centerFilter && !stationFilter && !shiftFilter}>
             <RefreshCw /> مسح الفلاتر
           </button>
         </div>
@@ -2107,33 +2123,31 @@ function OperationalCapacity({ data }: { data: any }) {
         />
         <div className="capacity-fields">
           <label>
-            الموظف
-            <select
-              required
-              value={draft.staffId}
-              onChange={(e) => setDraft({ ...draft, staffId: e.target.value })}
-            >
-              <option value="">اختر الموظف</option>
-              {(data.staff || []).map((x: any) => (
-                <option key={x.id} value={x.id}>
-                  {x.full_name} — {x.cadre_type} — {x.job_title || "بدون وظيفة"}
-                </option>
-              ))}
+            المركز
+            <select required value={draft.centerId} onChange={(e)=>setDraft({...draft,centerId:e.target.value,stationId:"",staffId:"",vehicleId:""})}>
+              <option value="">اختر المركز</option>
+              {(data.centers||[]).filter((x:any)=>x.active!==0).map((x:any)=><option key={x.id} value={x.id}>{x.name}</option>)}
             </select>
           </label>
           <label>
-            المركز
+            المحطة
+            <select required disabled={!draft.centerId} value={draft.stationId} onChange={(e)=>setDraft({...draft,stationId:e.target.value,vehicleId:""})}>
+              <option value="">{draft.centerId?"اختر المحطة":"اختر المركز أولًا"}</option>
+              {draftStations.filter((x:any)=>x.active!==0).map((x:any)=><option key={x.id} value={x.id}>{x.name}</option>)}
+            </select>
+          </label>
+          <label>
+            الموظف
             <select
               required
-              value={draft.stationId}
-              onChange={(e) =>
-                setDraft({ ...draft, stationId: e.target.value })
-              }
+              disabled={!draft.centerId}
+              value={draft.staffId}
+              onChange={(e) => setDraft({ ...draft, staffId: e.target.value })}
             >
-              <option value="">اختر المركز</option>
-              {(data.stations || []).map((x: any) => (
+              <option value="">{draft.centerId?"اختر موظفًا من المركز":"اختر المركز أولًا"}</option>
+              {draftEmployees.filter((x:any)=>x.active!==0).map((x: any) => (
                 <option key={x.id} value={x.id}>
-                  {x.name}
+                  {x.full_name} — {x.cadre_type} — {x.job_title || "بدون وظيفة"}
                 </option>
               ))}
             </select>
@@ -2170,13 +2184,14 @@ function OperationalCapacity({ data }: { data: any }) {
           <label>
             المركبة
             <select
+              disabled={!draft.stationId}
               value={draft.vehicleId}
               onChange={(e) =>
                 setDraft({ ...draft, vehicleId: e.target.value })
               }
             >
               <option value="">دون مركبة</option>
-              {(data.vehicles || []).map((x: any) => (
+              {draftVehicles.map((x: any) => (
                 <option key={x.id} value={x.id}>
                   {x.plate_number}
                 </option>
@@ -2226,6 +2241,7 @@ function OperationalCapacity({ data }: { data: any }) {
               onClick={() => {
                 setEditingId(null);
                 setDraft({
+                  centerId: "",
                   staffId: "",
                   stationId: "",
                   shift: "A",
@@ -2719,7 +2735,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
         ["fullName", "الاسم الكامل"],
         ["cadreType", "الكادر"],
         ["jobTitle", "الوظيفة"],
-        ["station", "المركز"],
+        ["centerId", "المركز"],
         ["startYear", "سنة الالتحاق"],
         ["gender", "الجنس"],
         ["birthYear", "سنة الميلاد"],
@@ -2732,7 +2748,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
     },
   };
   const c = configs[tab];
-  const staffRows = (data.staff || []).filter((r:any) => { let d:any={}; try { d=JSON.parse(r.detail||"{}"); } catch {} return (!staffFilters.search || `${r.full_name} ${d.station||""} ${r.job_title||""}`.toLowerCase().includes(staffFilters.search.toLowerCase())) && (staffFilters.station==="all" || d.station===staffFilters.station) && (staffFilters.category==="all" || (d.category||r.cadre_type)===staffFilters.category) && (staffFilters.level==="all" || (d.emtLevel||r.job_title)===staffFilters.level); });
+  const staffRows = (data.staff || []).filter((r:any) => { let d:any={}; try { d=JSON.parse(r.detail||"{}"); } catch {} return (!staffFilters.search || `${r.full_name} ${r.center_name||""} ${r.job_title||""}`.toLowerCase().includes(staffFilters.search.toLowerCase())) && (staffFilters.station==="all" || String(r.center_id)===staffFilters.station) && (staffFilters.category==="all" || (d.category||r.cadre_type)===staffFilters.category) && (staffFilters.level==="all" || (d.emtLevel||r.job_title)===staffFilters.level); });
   const staffDetail = (raw: any) => {
     if (!raw) return "—";
     try {
@@ -2742,7 +2758,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
   };
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
-    const payload = tab === "staff" ? { ...draft, detail: JSON.stringify({station:draft.station||"",startYear:draft.startYear||"",gender:draft.gender||"",birthYear:draft.birthYear||"",category:draft.category||draft.cadreType||"",emtLevel:draft.emtLevel||draft.jobTitle||"",medicalQualification:draft.medicalQualification||"",ambulanceLicence:draft.ambulanceLicence||""}) } : draft;
+    const payload = tab === "staff" ? { ...draft, detail: JSON.stringify({station:(data.centers||[]).find((c:any)=>String(c.id)===String(draft.centerId))?.name||"",startYear:draft.startYear||"",gender:draft.gender||"",birthYear:draft.birthYear||"",category:draft.category||draft.cadreType||"",emtLevel:draft.emtLevel||draft.jobTitle||"",medicalQualification:draft.medicalQualification||"",ambulanceLicence:draft.ambulanceLicence||""}) } : draft;
     const r = await fetch("/api/settings", {
       method: editingId ? "PATCH" : "POST",
       headers: { "content-type": "application/json" },
@@ -2905,7 +2921,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
               title={c.title}
               subtitle="القائمة المعتمدة في النظام"
             />
-            {tab === "staff" && <div className="staff-directory-filters"><label className="staff-search"><Search/><input placeholder="بحث بالاسم أو المركز أو الوظيفة" value={staffFilters.search} onChange={e=>setStaffFilters({...staffFilters,search:e.target.value})}/></label><label>المركز<select value={staffFilters.station} onChange={e=>setStaffFilters({...staffFilters,station:e.target.value})}><option value="all">كل المراكز</option>{[...new Set((data.staff||[]).map((r:any)=>{try{return JSON.parse(r.detail||"{}").station}catch{return ""}}).filter(Boolean))].map((x:any)=><option key={x}>{x}</option>)}</select></label><label>الفئة<select value={staffFilters.category} onChange={e=>setStaffFilters({...staffFilters,category:e.target.value})}><option value="all">كل الفئات</option>{[...new Set((data.staff||[]).map((r:any)=>{try{const d=JSON.parse(r.detail||"{}");return d.category||r.cadre_type}catch{return r.cadre_type}}).filter(Boolean))].map((x:any)=><option key={x}>{x}</option>)}</select></label><label>مستوى المسعف<select value={staffFilters.level} onChange={e=>setStaffFilters({...staffFilters,level:e.target.value})}><option value="all">كل المستويات</option>{[...new Set((data.staff||[]).map((r:any)=>{try{const d=JSON.parse(r.detail||"{}");return d.emtLevel||r.job_title}catch{return r.job_title}}).filter(Boolean))].map((x:any)=><option key={x}>{x}</option>)}</select></label><button className="ghost" onClick={()=>setStaffFilters({search:"",station:"all",category:"all",level:"all"})}><RefreshCw/> مسح</button></div>}
+            {tab === "staff" && <div className="staff-directory-filters"><label className="staff-search"><Search/><input placeholder="بحث بالاسم أو المركز أو الوظيفة" value={staffFilters.search} onChange={e=>setStaffFilters({...staffFilters,search:e.target.value})}/></label><label>المركز<select value={staffFilters.station} onChange={e=>setStaffFilters({...staffFilters,station:e.target.value})}><option value="all">كل المراكز</option>{(data.centers||[]).map((x:any)=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>الفئة<select value={staffFilters.category} onChange={e=>setStaffFilters({...staffFilters,category:e.target.value})}><option value="all">كل الفئات</option>{[...new Set((data.staff||[]).map((r:any)=>{try{const d=JSON.parse(r.detail||"{}");return d.category||r.cadre_type}catch{return r.cadre_type}}).filter(Boolean))].map((x:any)=><option key={x}>{x}</option>)}</select></label><label>مستوى المسعف<select value={staffFilters.level} onChange={e=>setStaffFilters({...staffFilters,level:e.target.value})}><option value="all">كل المستويات</option>{[...new Set((data.staff||[]).map((r:any)=>{try{const d=JSON.parse(r.detail||"{}");return d.emtLevel||r.job_title}catch{return r.job_title}}).filter(Boolean))].map((x:any)=><option key={x}>{x}</option>)}</select></label><button className="ghost" onClick={()=>setStaffFilters({search:"",station:"all",category:"all",level:"all"})}><RefreshCw/> مسح</button></div>}
             <div className="table-wrap employee-directory">
               <table>
                 <thead>
@@ -2937,7 +2953,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                   {(tab === "staff" ? staffRows : (c.rows || [])).map((r: any) => (
                     <tr key={r.id}>
                       {(tab === "staff"
-                        ? (()=>{let d:any={};try{d=JSON.parse(r.detail||"{}")}catch{} return [r.full_name,d.station,d.startYear,d.gender==="Male"?"ذكر":d.gender==="Female"?"أنثى":d.gender,d.birthYear,d.category||r.cadre_type,d.emtLevel||r.job_title,d.medicalQualification==="None"?"—":d.medicalQualification,d.ambulanceLicence==="Yes"?"نعم":d.ambulanceLicence==="No"?"لا":"—"]})()
+                        ? (()=>{let d:any={};try{d=JSON.parse(r.detail||"{}")}catch{} return [r.full_name,r.center_name||d.station,d.startYear,d.gender==="Male"?"ذكر":d.gender==="Female"?"أنثى":d.gender,d.birthYear,d.category||r.cadre_type,d.emtLevel||r.job_title,d.medicalQualification==="None"?"—":d.medicalQualification,d.ambulanceLicence==="Yes"?"نعم":d.ambulanceLicence==="No"?"لا":"—"]})()
                         : tab === "center"
                           ? [r.code, r.name, r.governorate]
                         : tab === "station"
@@ -2972,7 +2988,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                             setDraft(
                               tab === "staff"
                               ? {
-                                    ...(()=>{let d:any={};try{d=JSON.parse(r.detail||"{}")}catch{} return {station:d.station||"",startYear:d.startYear||"",gender:d.gender||"",birthYear:d.birthYear||"",category:d.category||r.cadre_type||"",emtLevel:d.emtLevel||r.job_title||"",medicalQualification:d.medicalQualification||"",ambulanceLicence:d.ambulanceLicence||""}})(),
+                                    ...(()=>{let d:any={};try{d=JSON.parse(r.detail||"{}")}catch{} return {centerId:String(r.center_id||""),startYear:d.startYear||"",gender:d.gender||"",birthYear:d.birthYear||"",category:d.category||r.cadre_type||"",emtLevel:d.emtLevel||r.job_title||"",medicalQualification:d.medicalQualification||"",ambulanceLicence:d.ambulanceLicence||""}})(),
                                     fullName: r.full_name || "",
                                     cadreType: r.cadre_type || "",
                                     jobTitle: r.job_title || "",
