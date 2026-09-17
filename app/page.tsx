@@ -50,9 +50,6 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -603,6 +600,17 @@ function DashboardView({
 }) {
   const s = dashboard.summary || {};
   const total = Number(s.total || 0);
+  const workingVehicles = Number(s.workingVehicles || 0);
+  const outVehicles = Number(s.outVehicles || 0);
+  const fleetTotal = workingVehicles + outVehicles;
+  const fleetReadiness = fleetTotal
+    ? Math.round((workingVehicles / fleetTotal) * 100)
+    : 0;
+  const timelinePeak = dashboard.timeline.reduce(
+    (peak, point) => (Number(point.value) > Number(peak?.value || 0) ? point : peak),
+    dashboard.timeline[0],
+  );
+  const latestTimelinePoint = dashboard.timeline.at(-1);
   const cards = [
     {
       label: "الحالات المنقولة",
@@ -727,73 +735,75 @@ function DashboardView({
         <div><b>{dashboard.governorates.length}</b><span>محافظات مغطاة</span></div>
       </section>
       <section className="charts-grid">
-        <article className="panel chart-wide">
+        <article className="panel chart-wide trend-panel">
           <PanelTitle
             icon={Activity}
-            title="اتجاه البلاغات"
-            subtitle="التغير الشهري خلال الفترة"
+            title="نبض العمليات"
+            subtitle="حركة البلاغات وتغيّر النشاط خلال الفترة"
           />
-          <div className="chart-body">
-            <ResponsiveContainer width="100%" height={280}>
+          <div className="trend-highlights">
+            <div><span>إجمالي الفترة</span><b>{total}</b><small>بلاغ</small></div>
+            <div><span>آخر فترة</span><b>{latestTimelinePoint?.value || 0}</b><small>{latestTimelinePoint?.month || "—"}</small></div>
+            <div><span>أعلى نشاط</span><b>{timelinePeak?.value || 0}</b><small>{timelinePeak?.month || "—"}</small></div>
+          </div>
+          <div className="chart-body trend-chart">
+            <ResponsiveContainer width="100%" height={250}>
               <AreaChart data={dashboard.timeline}>
                 <defs>
-                  <linearGradient id="area" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#c4172c" stopOpacity={0.35} />
+                  <linearGradient id="activityArea" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#e21d3b" stopOpacity={0.42} />
                     <stop
                       offset="100%"
                       stopColor="#c4172c"
-                      stopOpacity={0.02}
+                      stopOpacity={0}
                     />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="month" />
-                <YAxis />
-                <Tooltip />
+                <CartesianGrid strokeDasharray="5 7" vertical={false} stroke="#e7e9ee" />
+                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill:"#7a8391",fontSize:11}} />
+                <YAxis axisLine={false} tickLine={false} allowDecimals={false} tick={{fill:"#7a8391",fontSize:11}} />
+                <Tooltip
+                  cursor={{stroke:"#c4172c",strokeDasharray:"4 4"}}
+                  contentStyle={{borderRadius:12,border:"1px solid #f0d9dd",boxShadow:"0 10px 30px rgba(54,24,30,.12)"}}
+                  formatter={(value) => [`${value} بلاغ`, "البلاغات"]}
+                />
                 <Area
                   type="monotone"
                   dataKey="value"
                   stroke="#c4172c"
-                  strokeWidth={3}
-                  fill="url(#area)"
+                  strokeWidth={4}
+                  fill="url(#activityArea)"
+                  dot={{r:4,fill:"#fff",stroke:"#c4172c",strokeWidth:3}}
+                  activeDot={{r:7,fill:"#c4172c",stroke:"#fff",strokeWidth:4}}
+                  animationDuration={1100}
                 />
               </AreaChart>
             </ResponsiveContainer>
+            {!dashboard.timeline.length && (
+              <div className="trend-empty"><Activity /><b>لا توجد بلاغات ضمن الفترة المحددة</b><span>غيّري الفترة لعرض حركة البلاغات</span></div>
+            )}
           </div>
         </article>
-        <article className="panel">
+        <article className="panel fleet-pulse-panel">
           <PanelTitle
             icon={Gauge}
-            title="جاهزية الأسطول"
-            subtitle="السيارات العاملة وخارج الخدمة"
+            title="مؤشر جاهزية الأسطول"
+            subtitle="حالة المركبات الآن"
           />
-          <div className="chart-body pie-wrap">
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={dashboard.vehicleStatus}
-                  dataKey="value"
-                  nameKey="name"
-                  innerRadius={62}
-                  outerRadius={92}
-                  paddingAngle={4}
-                >
-                  {dashboard.vehicleStatus.map((_, i) => (
-                    <Cell key={i} fill={i===0?"#198754":"#c4172c"} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-            <div className="legend">
-              {dashboard.vehicleStatus.map((x, i) => (
-                <span key={x.name}>
-                  <i style={{ background: i===0?"#198754":"#c4172c" }} />
-                  {x.name}
-                  <b>{x.value}</b>
-                </span>
-              ))}
+          <div className="fleet-live-body">
+            <div className="fleet-readiness-gauge" style={{"--readiness": `${fleetReadiness * 3.6}deg`} as React.CSSProperties}>
+              <div>
+                <span className="fleet-live-label"><i /> مباشر</span>
+                <strong>{fleetReadiness}%</strong>
+                <small>جاهزية تشغيلية</small>
+              </div>
             </div>
+            <div className="fleet-status-grid">
+              <div className="fleet-status-card ready"><Ambulance/><span>عاملة الآن</span><b>{workingVehicles}</b></div>
+              <div className="fleet-status-card stopped"><Wrench/><span>خارج الخدمة</span><b>{outVehicles}</b></div>
+            </div>
+            <div className="fleet-readiness-track"><i style={{width:`${fleetReadiness}%`}} /></div>
+            <p className="fleet-summary">من أصل <b>{fleetTotal}</b> مركبة مسجلة في النظام</p>
           </div>
         </article>
         <article className="panel chart-half">
