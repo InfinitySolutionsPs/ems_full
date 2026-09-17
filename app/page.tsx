@@ -433,6 +433,7 @@ export default function HomePage() {
         {view === "dashboard" && (
           <DashboardView
             dashboard={dashboard}
+            staff={settingsData.staff}
             filters={filters}
             setFilters={setFilters}
             loading={loading}
@@ -585,6 +586,7 @@ function Filters({
 
 function DashboardView({
   dashboard,
+  staff,
   filters,
   setFilters,
   loading,
@@ -592,6 +594,7 @@ function DashboardView({
   onGovernorate,
 }: {
   dashboard: Dashboard;
+  staff: any[];
   filters: any;
   setFilters: any;
   loading: boolean;
@@ -606,11 +609,24 @@ function DashboardView({
   const fleetReadiness = fleetTotal
     ? Math.round((workingVehicles / fleetTotal) * 100)
     : 0;
-  const timelinePeak = dashboard.timeline.reduce(
-    (peak, point) => (Number(point.value) > Number(peak?.value || 0) ? point : peak),
-    dashboard.timeline[0],
-  );
-  const latestTimelinePoint = dashboard.timeline.at(-1);
+  const activeStaff = (staff || []).filter((person) => Number(person.active ?? 1) === 1);
+  const staffGroup = (key: "center" | "cadre") => {
+    const grouped = new Map<string, number>();
+    activeStaff.forEach((person) => {
+      let detail: any = {};
+      try { detail = JSON.parse(person.detail || "{}"); } catch {}
+      const label = key === "center"
+        ? person.center_name || detail.station || "غير مرتبط بمركز"
+        : person.cadre_type || detail.category || person.job_title || "غير مصنف";
+      grouped.set(label, (grouped.get(label) || 0) + 1);
+    });
+    return [...grouped.entries()].map(([name,value]) => ({name,value})).sort((a,b) => b.value-a.value);
+  };
+  const workforceCenters = staffGroup("center");
+  const workforceCadres = staffGroup("cadre");
+  const licensedStaff = activeStaff.filter((person) => {
+    try { return JSON.parse(person.detail || "{}").ambulanceLicence === "Yes"; } catch { return false; }
+  }).length;
   const cards = [
     {
       label: "الحالات المنقولة",
@@ -735,53 +751,28 @@ function DashboardView({
         <div><b>{dashboard.governorates.length}</b><span>محافظات مغطاة</span></div>
       </section>
       <section className="charts-grid">
-        <article className="panel chart-wide trend-panel">
+        <article className="panel chart-wide workforce-panel">
           <PanelTitle
-            icon={Activity}
-            title="نبض العمليات"
-            subtitle="حركة البلاغات وتغيّر النشاط خلال الفترة"
+            icon={UsersRound}
+            title="القوى العاملة في الدائرة"
+            subtitle="بيانات مباشرة من دليل الموظفين"
           />
-          <div className="trend-highlights">
-            <div><span>إجمالي الفترة</span><b>{total}</b><small>بلاغ</small></div>
-            <div><span>آخر فترة</span><b>{latestTimelinePoint?.value || 0}</b><small>{latestTimelinePoint?.month || "—"}</small></div>
-            <div><span>أعلى نشاط</span><b>{timelinePeak?.value || 0}</b><small>{timelinePeak?.month || "—"}</small></div>
+          <div className="workforce-highlights">
+            <div className="workforce-total"><UsersRound/><span>إجمالي الموظفين الفعالين</span><b>{activeStaff.length}</b></div>
+            <div><Building2/><span>المراكز المرتبطة</span><b>{workforceCenters.filter(x=>x.name!=="غير مرتبط بمركز").length}</b></div>
+            <div><ShieldCheck/><span>حاملو رخصة إسعاف</span><b>{licensedStaff}</b></div>
           </div>
-          <div className="chart-body trend-chart">
-            <ResponsiveContainer width="100%" height={250}>
-              <AreaChart data={dashboard.timeline}>
-                <defs>
-                  <linearGradient id="activityArea" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#e21d3b" stopOpacity={0.42} />
-                    <stop
-                      offset="100%"
-                      stopColor="#c4172c"
-                      stopOpacity={0}
-                    />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="5 7" vertical={false} stroke="#e7e9ee" />
-                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill:"#7a8391",fontSize:11}} />
-                <YAxis axisLine={false} tickLine={false} allowDecimals={false} tick={{fill:"#7a8391",fontSize:11}} />
-                <Tooltip
-                  cursor={{stroke:"#c4172c",strokeDasharray:"4 4"}}
-                  contentStyle={{borderRadius:12,border:"1px solid #f0d9dd",boxShadow:"0 10px 30px rgba(54,24,30,.12)"}}
-                  formatter={(value) => [`${value} بلاغ`, "البلاغات"]}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#c4172c"
-                  strokeWidth={4}
-                  fill="url(#activityArea)"
-                  dot={{r:4,fill:"#fff",stroke:"#c4172c",strokeWidth:3}}
-                  activeDot={{r:7,fill:"#c4172c",stroke:"#fff",strokeWidth:4}}
-                  animationDuration={1100}
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-            {!dashboard.timeline.length && (
-              <div className="trend-empty"><Activity /><b>لا توجد بلاغات ضمن الفترة المحددة</b><span>غيّري الفترة لعرض حركة البلاغات</span></div>
-            )}
+          <div className="workforce-breakdown">
+            <div className="workforce-list">
+              <h4><MapPin/> التوزيع حسب المركز</h4>
+              {workforceCenters.slice(0,5).map((item,index)=><div key={item.name}><span><i style={{background:["#c4172c","#2477a8","#198754","#cf7b16","#8a4fa3"][index%5]}}/>{item.name}</span><b>{item.value}</b></div>)}
+              {!workforceCenters.length && <small>لا يوجد موظفون مسجلون</small>}
+            </div>
+            <div className="workforce-list cadres">
+              <h4><UserCog/> التوزيع حسب الكادر</h4>
+              {workforceCadres.slice(0,5).map((item,index)=><div key={item.name}><span>{item.name}</span><b>{item.value}</b><em><i style={{width:`${Math.max(8,(item.value/(workforceCadres[0]?.value||1))*100)}%`}}/></em></div>)}
+              {!workforceCadres.length && <small>لا توجد تصنيفات متاحة</small>}
+            </div>
           </div>
         </article>
         <article className="panel fleet-pulse-panel">
