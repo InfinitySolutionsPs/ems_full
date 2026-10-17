@@ -1,7 +1,6 @@
 import { env } from "@/lib/server-env";
 import { NextRequest, NextResponse } from "next/server";
 import { getAccess, hasPermission } from "@/lib/access";
-import { ensureDataSheetImported } from "@/lib/datasheet-import";
 
 const clean = (v: unknown) => (typeof v === "string" ? v.trim() : v);
 const minutesBetween = (a?: string, b?: string) => {
@@ -20,7 +19,6 @@ const minutesBetweenDates = (ad?: unknown, at?: unknown, bd?: unknown, bt?: unkn
 };
 
 export async function GET(request: NextRequest) {
-  const archiveImport = await ensureDataSheetImported(env.DB).catch((error) => ({ imported:0,existing:0,failed:0,total:0,errors:[error instanceof Error?error.message:String(error)] }));
   const access = await getAccess(request);
   if (!hasPermission(access.profile,"incidents.view")) return NextResponse.json({ error: "لا توجد صلاحية لعرض البلاغات" }, { status: 403 });
   const url = new URL(request.url);
@@ -43,10 +41,21 @@ export async function GET(request: NextRequest) {
     args.push(access.profile.station);
   }
   sql += " ORDER BY call_date DESC, call_time DESC LIMIT 1000";
-  const result = await env.DB.prepare(sql)
-    .bind(...args)
-    .all();
-  return NextResponse.json({ incidents: result.results, archiveImport });
+  try {
+    const result = await env.DB.prepare(sql)
+      .bind(...args)
+      .all();
+    return NextResponse.json(
+      { incidents: result.results },
+      { headers: { "Cache-Control": "no-store, max-age=0" } },
+    );
+  } catch (error) {
+    console.error("incidents list query failed", error);
+    return NextResponse.json(
+      { error: "تعذر تحميل سجل البلاغات من قاعدة البيانات" },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(request: NextRequest) {
