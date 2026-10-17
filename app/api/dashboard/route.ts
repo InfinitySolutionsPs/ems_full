@@ -24,7 +24,7 @@ export async function GET(request:NextRequest){
     rows("SELECT COALESCE(NULLIF(job_title,''),NULLIF(cadre_type,''),'غير مصنف') name,COUNT(*)::int value FROM staff WHERE active=1 GROUP BY 1 ORDER BY value DESC,name LIMIT 8"),
     rows(`SELECT pickup_governorate name,COUNT(*)::int value FROM incidents WHERE ${where} GROUP BY pickup_governorate ORDER BY value DESC`,args),
     rows(`SELECT category name,COUNT(*)::int value FROM incidents WHERE ${where} GROUP BY category ORDER BY value DESC`,args),
-    rows(`SELECT TO_CHAR(DATE_TRUNC('month',call_date::date),'YYYY-MM') month,COUNT(*)::int value FROM incidents WHERE ${where} GROUP BY DATE_TRUNC('month',call_date::date) ORDER BY DATE_TRUNC('month',call_date::date)`,args),
+    rows(`SELECT LEFT(call_date::text,7) month,COUNT(*)::int value FROM incidents WHERE ${where} GROUP BY LEFT(call_date::text,7) ORDER BY LEFT(call_date::text,7)`,args),
     rows(`SELECT case_type name,COUNT(*)::int value FROM incidents WHERE ${where} GROUP BY case_type ORDER BY value DESC LIMIT 7`,args),
     rows(`SELECT station name,COUNT(*)::int incidents,COALESCE(ROUND(SUM(distance_km)::numeric,1),0) distance,COALESCE(ROUND(AVG(NULLIF(response_minutes,0))::numeric,1),0) response FROM incidents WHERE ${where} GROUP BY station ORDER BY incidents DESC`,args),
   ]);
