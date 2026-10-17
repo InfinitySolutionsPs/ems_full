@@ -22,6 +22,7 @@ import {
   Gauge,
   HeartPulse,
   Home,
+  History,
   MapPin,
   Menu,
   LogOut,
@@ -69,6 +70,7 @@ type View =
   | "fleet"
   | "maintenance"
   | "approvals"
+  | "audit"
   | "reports"
   | "users"
   | "settings";
@@ -139,6 +141,7 @@ const emptyForm: Record<string, string> = {
   incidentNumber: "",
   incidentCode: "",
   incidentStatus: "completed",
+  entryTime: "",
   beneficiaryName: "",
   gender: "",
   contact: "",
@@ -160,7 +163,7 @@ const emptyForm: Record<string, string> = {
   kmStart: "",
   kmEnd: "",
   callDate: today,
-  callTime: currentSystemTime(),
+  callTime: "",
   dispatchDate: today,
   dispatchTime: "",
   onSceneDate: today,
@@ -207,10 +210,7 @@ export default function HomePage() {
       governorate: "all",
       category: "all",
     }),
-    [form, setForm] = useState<Record<string, string>>(() => ({
-      ...emptyForm,
-      callTime: currentSystemTime(),
-    }));
+    [form, setForm] = useState<Record<string, string>>(() => ({ ...emptyForm }));
   const [notifications, setNotifications] = useState<any[]>([]),
     [showNotifications, setShowNotifications] = useState(false),
     [pending, setPending] = useState<Incident[]>([]),
@@ -320,7 +320,7 @@ export default function HomePage() {
           ...current,
           incidentCode: result.code,
           incidentNumber: result.code,
-          callTime: current.callTime || currentSystemTime(),
+          entryTime: current.entryTime || currentSystemTime(),
         }));
       })
       .catch((error) => {
@@ -333,20 +333,22 @@ export default function HomePage() {
   }, [view, form.incidentCode]);
   const setField = (key: string, value: string) =>
     setForm((v) => ({ ...v, [key]: value }));
-  const submit = async (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const submissionAction = submitter?.value === "approve" ? "approve" : "draft";
     const response = await fetch("/api/incidents", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(form),
+      body: JSON.stringify({ ...form, submissionAction }),
     });
     const result = await response.json();
     if (!response.ok) {
       toast.error(result.error || "تعذر حفظ البلاغ");
       return;
     }
-    toast.success(`تم حفظ البلاغ ${form.incidentNumber}`);
-    setForm({ ...emptyForm, callDate: today, callTime: currentSystemTime() });
+    toast.success(submissionAction === "approve" ? `تم اعتماد البلاغ ${form.incidentNumber}` : `تم حفظ البلاغ ${form.incidentNumber} كمسودة`);
+    setForm({ ...emptyForm, callDate: today });
     setView("dashboard");
     refresh();
     loadAux();
@@ -393,6 +395,7 @@ export default function HomePage() {
     { id: "fleet", label: "المركبات والوقود", icon: Ambulance, permission:"fleet.view" },
     { id: "maintenance", label: "صيانة المركبات", icon: Wrench, permission:"maintenance.view" },
     { id: "approvals", label: "اعتماد الإحصائيات", icon: ClipboardCheck, permission:"approvals.manage" },
+    { id: "audit", label: "سجل التعديلات", icon: History, permission:"audit.view" },
     { id: "reports", label: "التقارير", icon: FileBarChart, permission:"reports.view" },
     { id: "settings", label: "الإعدادات", icon: Settings, permission:"settings.manage" },
     { id: "users", label: "المستخدمون", icon: UserCog, permission:"users.manage" },
@@ -483,6 +486,8 @@ export default function HomePage() {
                             ? "طلبات الصيانة والمرفقات وحالة المركبة"
                         : view === "approvals"
                           ? "مراجعة الإحصائيات قبل ظهورها في المؤشرات"
+                        : view === "audit"
+                          ? "تتبع إنشاء البلاغات وتعديلها واعتمادها"
                           : view === "reports"
                             ? "تقارير مستقلة قابلة للطباعة والتصدير"
                             : view === "users"
@@ -538,6 +543,9 @@ export default function HomePage() {
             filters={filters}
             setFilters={setFilters}
             isAdmin={currentRole === "admin"}
+            currentUser={currentUser}
+            canEdit={can("incidents.edit")}
+            canEditApproved={can("incidents.edit_approved")}
           />
         )}{" "}
         {view === "approvals" && (
@@ -549,6 +557,7 @@ export default function HomePage() {
             }}
           />
         )}{" "}
+        {view === "audit" && <AuditLogView />}{" "}
         {view === "reports" && (
           <ReportsV2
             dashboard={dashboard}
@@ -946,7 +955,7 @@ function IncidentForm({
 }: {
   form: Record<string, string>;
   setField: (k: string, v: string) => void;
-  submit: (e: React.FormEvent) => void;
+  submit: (e: React.FormEvent<HTMLFormElement>) => void;
   centers: any[];
   stationsData: any[];
   vehicles: any[];
@@ -959,6 +968,7 @@ function IncidentForm({
     : [];
   const selectedVehicle = (vehicles || []).find((v:any)=>v.plate_number===form.vehicle);
   const incidentStatus = form.incidentStatus || "completed";
+  const isCancelled = incidentStatus !== "completed";
   const requiresMovement = incidentStatus !== "cancelled_before_dispatch";
   const requiresDelivery = incidentStatus === "completed";
   const field = (
@@ -1048,9 +1058,10 @@ function IncidentForm({
           )}
           {field("callDate", "تاريخ البلاغ", "date", true)}
           <label>
-            وقت استلام البلاغ <em>*</em>
-            <input type="time" value={form.callTime} readOnly required />
+            وقت إدخال البلاغ
+            <input type="time" value={form.entryTime} readOnly />
           </label>
+          {field("callTime", "وقت استلام البلاغ", "time", true)}
           {requiresMovement && field("dispatchTime", "وقت تحرك المركبة", "time")}
           {requiresMovement && field("arrivalTime", "وقت الوصول للموقع", "time")}
           {requiresDelivery && field("hospitalTime", "وقت الوصول للمستشفى", "time")}
@@ -1086,7 +1097,7 @@ function IncidentForm({
         </div>
       </FormSection>
 
-      <FormSection icon={MapPin} title="استلام الحالة وتسليمها">
+      {!isCancelled && <FormSection icon={MapPin} title="استلام الحالة وتسليمها">
         <div className="form-grid cols-4">
           {select("pickupGovernorate", "المحافظة", governors, true)}
           {field("pickupMunicipality", "البلدية")}
@@ -1123,7 +1134,7 @@ function IncidentForm({
             form.dropoffType.startsWith("Hospital") &&
             select("dropoffLocation", "المستشفى المستلم", hospitals, true)}
         </div>
-      </FormSection>
+      </FormSection>}
 
       <FormSection icon={Ambulance} title="المركز والمحطة والمركبة">
         <div className="form-grid cols-4">
@@ -1260,7 +1271,7 @@ function IncidentForm({
         </div>
       </FormSection>
 
-      <FormSection icon={Activity} title="التدخلات والملاحظات">
+      {!isCancelled && <FormSection icon={Activity} title="التدخلات والملاحظات">
         <div className="form-grid cols-3">
           {field("chiefComplaint", "الشكوى الرئيسية")}
           <label>
@@ -1312,14 +1323,30 @@ function IncidentForm({
             </label>
           ))}
         </div>
-      </FormSection>
+      </FormSection>}
+
+      {isCancelled && (
+        <FormSection icon={ClipboardList} title="ملاحظات البلاغ الملغي">
+          <label className="cancelled-notes">
+            ملاحظات
+            <textarea
+              value={form.notes}
+              onChange={(e) => setField("notes", e.target.value)}
+              placeholder="اكتب سبب الإلغاء وأي تفاصيل مهمة"
+            />
+          </label>
+        </FormSection>
+      )}
 
       <div className="form-actions">
         <button type="button" className="ghost" onClick={() => location.reload()}>
           <X /> إلغاء
         </button>
-        <button className="primary" type="submit" disabled={!form.incidentCode}>
-          <Save /> حفظ البلاغ
+        <button className="ghost save-draft" type="submit" value="draft" disabled={!form.incidentCode}>
+          <Save /> حفظ كمسودة
+        </button>
+        <button className="primary" type="submit" value="approve" disabled={!form.incidentCode}>
+          <ClipboardCheck /> اعتماد البلاغ
         </button>
       </div>
     </form>
@@ -1333,6 +1360,9 @@ function Records({
   filters,
   setFilters,
   isAdmin,
+  currentUser,
+  canEdit,
+  canEditApproved,
 }: {
   incidents: Incident[];
   loading: boolean;
@@ -1340,6 +1370,9 @@ function Records({
   filters: {from:string;to:string;governorate:string;category:string};
   setFilters: React.Dispatch<React.SetStateAction<{from:string;to:string;governorate:string;category:string}>>;
   isAdmin: boolean;
+  currentUser: any;
+  canEdit: boolean;
+  canEditApproved: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [recordFilters, setRecordFilters] = useState({ station:"all", shift:"all", urgency:"all", quality:"all" });
@@ -1358,6 +1391,8 @@ function Records({
     setSelected(x);
     setIncidentDraft({
       id: x.id,
+      incidentStatus: x.incident_status || "completed",
+      entryTime: x.entry_time || "",
       beneficiaryName: x.beneficiary_name || "",
       contact: x.contact || "",
       gender: x.gender || "Male",
@@ -1385,6 +1420,7 @@ function Records({
       hospitalTime: x.hospital_time || "",
       availableDate: x.available_date || x.call_date || today,
       clearTime: x.clear_time || "",
+      returnTime: x.return_time || "",
       kmStart: x.km_start || "",
       kmEnd: x.km_end || "",
       dispatcherPrimary: x.dispatcher_primary || "",
@@ -1393,6 +1429,7 @@ function Records({
       emtLead: x.emt_lead || "",
       emtAssist: x.emt_assist || "",
       chiefComplaint: x.chief_complaint || "",
+      interventions: x.interventions || "",
       fuelLiters: x.fuel_liters || "",
       cancelled: x.cancelled ? "1" : "",
       patientDeceased: x.patient_deceased ? "1" : "",
@@ -1403,8 +1440,9 @@ function Records({
       notes: x.notes || "",
     });
   };
-  const updateIncident = async () => { setSaving(true); try { const r=await fetch("/api/incidents",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify(incidentDraft)}); const v=await r.json(); if(!r.ok) throw Error(v.error||"تعذر تعديل البلاغ"); toast.success("تم تعديل البلاغ وإعادته للاعتماد"); setSelected(null); setEditing(false); onRefresh(); } catch(e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setSaving(false); } };
+  const updateIncident = async () => { setSaving(true); try { const submissionAction=selected?.approval_status==="approved"?"approve":"draft"; const r=await fetch("/api/incidents",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({...incidentDraft,submissionAction})}); const v=await r.json(); if(!r.ok) throw Error(v.error||"تعذر تعديل البلاغ"); toast.success(submissionAction==="approve"?"تم حفظ تعديل البلاغ المعتمد":"تم حفظ تعديل المسودة"); setSelected(null); setEditing(false); onRefresh(); } catch(e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setSaving(false); } };
   const deleteIncident = async () => { if(!isAdmin || !selected) return; if(!window.confirm(`هل تريدين حذف البلاغ ${selected.incident_number} نهائيًا؟`)) return; setSaving(true); try { const r=await fetch(`/api/incidents?id=${selected.id}`,{method:"DELETE"}); const v=await r.json(); if(!r.ok) throw Error(v.error||"تعذر حذف البلاغ"); toast.success("تم حذف البلاغ"); setSelected(null); onRefresh(); } catch(e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setSaving(false); } };
+  const mayEditSelected = !!selected && (selected.approval_status === "approved" ? canEditApproved : canEdit || (selected.approval_status === "draft" && Number(selected.created_by_user_id) === Number(currentUser?.id)));
   return (
     <div className="page-stack">
       <section className="toolbar panel">
@@ -1557,11 +1595,13 @@ function Records({
                 ["shift", "الوردية", "select", ["A","B","C"].map((x) => [x, x])],
                 ["vehicle", "المركبة", "text"],
                 ["callDate", "التاريخ", "date"],
-                ["callTime", "وقت البلاغ", "time"],
+                ["entryTime", "وقت إدخال البلاغ", "time"],
+                ["callTime", "وقت استلام البلاغ", "time"],
                 ["dispatchTime", "الانطلاق", "time"],
                 ["arrivalTime", "الوصول", "time"],
                 ["hospitalTime", "وقت المستشفى", "time"],
                 ["clearTime", "الجاهزية", "time"],
+                ["returnTime", "العودة للمحطة", "time"],
                 ["kmStart", "عداد البداية", "number"],
                 ["kmEnd", "عداد النهاية", "number"],
                 ["fuelLiters", "الوقود", "number"],
@@ -1613,7 +1653,7 @@ function Records({
                 إغلاق
               </button>
               {isAdmin && <button className="danger-button" onClick={deleteIncident} disabled={saving}><Trash2/> حذف البلاغ</button>}
-              {editing ? <button className="primary" onClick={updateIncident} disabled={saving}><Save/> حفظ التعديل</button> : <button className="primary" onClick={() => setEditing(true)}><Pencil/> تعديل البلاغ</button>}
+              {editing ? <button className="primary" onClick={updateIncident} disabled={saving}><Save/> حفظ التعديل</button> : mayEditSelected ? <button className="primary" onClick={() => setEditing(true)}><Pencil/> تعديل البلاغ</button> : <span className="locked-record"><ShieldCheck/> البلاغ المعتمد مقفل</span>}
             </div>
           </section>
         </div>
@@ -1621,6 +1661,20 @@ function Records({
     </div>
   );
 }
+
+function AuditLogView() {
+  const [logs,setLogs]=useState<any[]>([]),[loading,setLoading]=useState(true),[search,setSearch]=useState(""),[action,setAction]=useState("all");
+  const load=useCallback(async()=>{setLoading(true);try{const q=new URLSearchParams({search,action});const response=await fetch(`/api/audit-logs?${q}`,{cache:"no-store"});const result=await response.json();if(!response.ok)throw Error(result.error||"تعذر تحميل سجل التعديلات");setLogs(result.logs||[])}catch(error){toast.error(String(error).replace(/^Error: /,""))}finally{setLoading(false)}},[search,action]);
+  useEffect(()=>{const timer=window.setTimeout(()=>void load(),250);return()=>window.clearTimeout(timer)},[load]);
+  const labels:Record<string,string>={draft_create:"إنشاء مسودة",approve_create:"إنشاء واعتماد",update_draft:"تعديل مسودة",update_approved:"تعديل بلاغ معتمد",approved:"اعتماد",rejected:"رفض",delete:"حذف"};
+  const describe=(details:string)=>{try{const value=JSON.parse(details||"{}");const changed=Object.keys(value.changes||{});return changed.length?`تم تعديل ${changed.length} حقول: ${changed.join("، ")}`:`البلاغ ${value.incidentNumber||""}`}catch{return details||"—"}};
+  return <div className="page-stack audit-page">
+    <section className="panel audit-hero"><PanelTitle icon={History} title="سجل تعديلات البلاغات" subtitle="سجل رقابي لا يمكن لمستخدم الإدخال حذفه أو تعديله"/><button className="ghost" onClick={()=>void load()}><RefreshCw/> تحديث</button></section>
+    <section className="panel audit-filters"><label><Search/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ابحث برقم البلاغ أو اسم المستخدم"/></label><select value={action} onChange={e=>setAction(e.target.value)}><option value="all">كل العمليات</option>{Object.entries(labels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></section>
+    <section className="panel table-panel"><div className="table-wrap"><table><thead><tr><th>التاريخ والوقت</th><th>المستخدم</th><th>العملية</th><th>رقم البلاغ</th><th>التفاصيل</th></tr></thead><tbody>{logs.map(log=><tr key={log.id}><td>{new Date(log.created_at).toLocaleString("ar-PS")}</td><td><b>{log.actor||"النظام"}</b></td><td><span className="audit-action">{labels[log.action]||log.action}</span></td><td>{log.incident_number||log.entity_id||"—"}</td><td>{describe(log.details)}</td></tr>)}{!logs.length&&!loading&&<tr><td colSpan={5}><Empty/></td></tr>}</tbody></table></div>{loading&&<div className="loading-row">جاري تحميل السجل...</div>}</section>
+  </div>;
+}
+
 function Reports({
   dashboard,
   incidents,
@@ -1971,7 +2025,7 @@ function Approvals({
 function UsersView({ users, reload }: { users: any[]; reload: () => void }) {
   const permissionGroups = [
     {title:"لوحة المؤشرات والتقارير",icon:BarChart3,items:[["dashboard.view","عرض لوحة المؤشرات"],["reports.view","عرض وتصدير التقارير"]]},
-    {title:"البلاغات والإحصائيات",icon:ClipboardList,items:[["incidents.view","عرض البلاغات"],["incidents.create","إضافة البلاغات"],["incidents.edit","تعديل البلاغات"],["incidents.delete","حذف البلاغات"],["approvals.manage","اعتماد الإحصائيات"]]},
+    {title:"البلاغات والإحصائيات",icon:ClipboardList,items:[["incidents.view","عرض البلاغات"],["incidents.create","إضافة البلاغات وحفظ المسودات"],["incidents.edit","تعديل المسودات والبلاغات غير المعتمدة"],["incidents.edit_approved","تعديل البلاغات المعتمدة"],["incidents.delete","حذف البلاغات"],["approvals.manage","اعتماد الإحصائيات"],["audit.view","عرض سجل التعديلات"]]},
     {title:"القدرة والتنسيقات",icon:Gauge,items:[["capacity.view","عرض القدرة التشغيلية"],["capacity.manage","إدارة القدرة التشغيلية"],["coordination.view","عرض التنسيقات"],["coordination.manage","إدارة التنسيقات"]]},
     {title:"الأسطول والصيانة",icon:Ambulance,items:[["fleet.view","عرض المركبات والوقود"],["fleet.manage","إدارة المركبات والوقود"],["maintenance.view","عرض الصيانة"],["maintenance.manage","إدارة الصيانة"]]},
     {title:"إدارة النظام",icon:Settings,items:[["users.manage","إدارة المستخدمين"],["settings.manage","إدارة الإعدادات"]]},
