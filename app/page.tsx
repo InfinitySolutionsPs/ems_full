@@ -273,9 +273,14 @@ export default function HomePage() {
     } catch {}
   }, []);
   useEffect(() => {
-    refresh();
-    loadAux();
-  }, [refresh, loadAux]);
+    void refresh();
+  }, [refresh]);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      void loadAux();
+    }, 800);
+    return () => window.clearTimeout(timer);
+  }, [loadAux]);
   const setField = (key: string, value: string) =>
     setForm((v) => ({ ...v, [key]: value }));
   const submit = async (e: React.FormEvent) => {
