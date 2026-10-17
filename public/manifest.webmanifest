@@ -1,0 +1,15 @@
+{
+  "name": "نظام إدارة عمليات الإسعاف والطوارئ",
+  "short_name": "EMS",
+  "description": "إدخال بلاغات الإسعاف والعمل عند انقطاع الإنترنت",
+  "lang": "ar",
+  "dir": "rtl",
+  "start_url": "/?source=pwa",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f5f6f8",
+  "theme_color": "#c4172c",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
