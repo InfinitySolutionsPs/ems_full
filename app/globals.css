@@ -150,6 +150,11 @@ svg {
   background: #f5fbf7;
   border-radius: 14px;
 }
+.live-dot.offline{background:#f59e0b;box-shadow:0 0 0 5px #fef3c7}
+.install-app,.sync-now{white-space:nowrap}
+.sync-now:disabled{opacity:.55;cursor:not-allowed}
+.spin{animation:ems-spin .9s linear infinite}
+@keyframes ems-spin{to{transform:rotate(360deg)}}
 .side-status b {
   font-size: 13px;
 }
