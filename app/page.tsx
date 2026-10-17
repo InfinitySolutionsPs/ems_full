@@ -60,6 +60,14 @@ import {
 } from "recharts";
 import { toast, Toaster } from "sonner";
 import MaintenanceView from "./maintenance-view";
+import {
+  cacheReferenceData,
+  createOfflineIncidentCode,
+  getCachedReferenceData,
+  getQueueCount,
+  queueIncident,
+  syncQueuedIncidents,
+} from "@/lib/offline-client";
 
 type View =
   | "dashboard"
@@ -194,6 +202,10 @@ export default function HomePage() {
   const [view, setView] = useState<View>("dashboard"),
     [mobile, setMobile] = useState(false),
     [loading, setLoading] = useState(true);
+  const [online, setOnline] = useState(true),
+    [offlineQueue, setOfflineQueue] = useState(0),
+    [syncing, setSyncing] = useState(false),
+    [installPrompt, setInstallPrompt] = useState<any>(null);
   const [dashboard, setDashboard] = useState<Dashboard>({
     summary: {},
     governorates: [],
@@ -228,6 +240,43 @@ export default function HomePage() {
     });
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("new") === "1") setView("new");
+  }, []);
+  const updateOfflineState = useCallback(async () => {
+    setOnline(navigator.onLine);
+    setOfflineQueue(await getQueueCount().catch(() => 0));
+  }, []);
+  const runOfflineSync = useCallback(async (notify = false) => {
+    if (!navigator.onLine || syncing) return;
+    setSyncing(true);
+    try {
+      const result = await syncQueuedIncidents();
+      setOfflineQueue(result.remaining);
+      if (notify && result.synced) toast.success(`تمت مزامنة ${result.synced} بلاغ بنجاح`);
+      if (notify && result.failed) toast.error(`تعذر ترحيل ${result.failed} بلاغ؛ سيعاد المحاولة لاحقًا`);
+    } finally {
+      setSyncing(false);
+    }
+  }, [syncing]);
+  useEffect(() => {
+    if ("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(() => undefined);
+    const onOnline = () => { void updateOfflineState(); void runOfflineSync(true); };
+    const onOffline = () => void updateOfflineState();
+    const onQueueChange = () => void updateOfflineState();
+    const onInstall = (event: Event) => { event.preventDefault(); setInstallPrompt(event); };
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
+    window.addEventListener("ems-offline-change", onQueueChange);
+    window.addEventListener("beforeinstallprompt", onInstall);
+    void updateOfflineState();
+    if (navigator.onLine) void runOfflineSync(false);
+    return () => {
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("ems-offline-change", onQueueChange);
+      window.removeEventListener("beforeinstallprompt", onInstall);
+    };
+  // Initial registration should run once; later syncs are triggered by connectivity and user action.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const query = useMemo(
     () => new URLSearchParams(filters).toString(),
@@ -266,7 +315,7 @@ export default function HomePage() {
           );
         }
       } else {
-        toast.error("تعذر الاتصال بسجل البلاغات. حاول مرة أخرى.");
+        if (navigator.onLine) toast.error("تعذر الاتصال بسجل البلاغات. حاول مرة أخرى.");
       }
 
       if (dashboardResult.status === "fulfilled") {
@@ -280,7 +329,7 @@ export default function HomePage() {
           );
         }
       } else {
-        toast.error("تعذر الاتصال بلوحة المؤشرات. حاول مرة أخرى.");
+        if (navigator.onLine) toast.error("تعذر الاتصال بلوحة المؤشرات. حاول مرة أخرى.");
       }
     } finally {
       setLoading(false);
@@ -298,8 +347,15 @@ export default function HomePage() {
       if (a.ok) setPending((await a.json()).incidents);
       if (u.status===401) { window.location.href="/login"; return; }
       if (u.ok) { const userData = await u.json(); setUsers(userData.users); setCurrentRole(userData.currentUser?.role || "viewer"); setCurrentUser(userData.currentUser); setCurrentPermissions(userData.currentUser?.permissions || []); }
-      if (s.ok) setSettingsData(await s.json());
-    } catch {}
+      if (s.ok) {
+        const referenceData = await s.json();
+        setSettingsData(referenceData);
+        await cacheReferenceData(referenceData).catch(() => undefined);
+      }
+    } catch {
+      const cached = await getCachedReferenceData<any>();
+      if (cached) setSettingsData(cached);
+    }
   }, []);
   useEffect(() => {
     void refresh();
@@ -331,7 +387,11 @@ export default function HomePage() {
         if (
           !(error instanceof DOMException && error.name === "AbortError")
         )
-          toast.error("تعذر إنشاء كود البلاغ تلقائيًا");
+          {
+            const code = createOfflineIncidentCode();
+            setForm((current) => ({ ...current, incidentCode: code, incidentNumber: code, entryTime: current.entryTime || currentSystemTime() }));
+            if (navigator.onLine) toast.warning("تعذر الاتصال بالخادم؛ تم إنشاء كود محلي آمن");
+          }
       });
     return () => controller.abort();
   }, [view, form.incidentCode]);
@@ -341,21 +401,31 @@ export default function HomePage() {
     e.preventDefault();
     const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
     const submissionAction = submitter?.value === "approve" ? "approve" : "draft";
-    const response = await fetch("/api/incidents", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ ...form, submissionAction }),
-    });
-    const result = await response.json();
-    if (!response.ok) {
-      toast.error(result.error || "تعذر حفظ البلاغ");
-      return;
+    const payload = { ...form, submissionAction };
+    try {
+      if (!navigator.onLine) throw new TypeError("offline");
+      const response = await fetch("/api/incidents", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        toast.error(result.error || "تعذر حفظ البلاغ");
+        return;
+      }
+      toast.success(submissionAction === "approve" ? `تم اعتماد البلاغ ${form.incidentNumber}` : `تم حفظ البلاغ ${form.incidentNumber} كمسودة`);
+      setForm({ ...emptyForm, callDate: today });
+      setView("dashboard");
+      refresh();
+      loadAux();
+    } catch {
+      await queueIncident(payload);
+      setOfflineQueue(await getQueueCount());
+      toast.success(`تم حفظ البلاغ ${form.incidentNumber} محليًا وسيُرحّل عند عودة الإنترنت`);
+      setForm({ ...emptyForm, callDate: today });
+      setView("new");
     }
-    toast.success(submissionAction === "approve" ? `تم اعتماد البلاغ ${form.incidentNumber}` : `تم حفظ البلاغ ${form.incidentNumber} كمسودة`);
-    setForm({ ...emptyForm, callDate: today });
-    setView("dashboard");
-    refresh();
-    loadAux();
   };
   const exportCsv = () => {
     const columns = [
@@ -437,10 +507,10 @@ export default function HomePage() {
           ))}
         </nav>
         <div className="side-status">
-          <span className="live-dot" />
+          <span className={`live-dot ${online ? "" : "offline"}`} />
           <div>
-            <b>النظام متصل</b>
-            <small>آخر مزامنة: الآن</small>
+            <b>{online ? "النظام متصل" : "وضع العمل دون إنترنت"}</b>
+            <small>{offlineQueue ? `${offlineQueue} بلاغ بانتظار المزامنة` : "لا توجد بيانات معلقة"}</small>
           </div>
         </div>
         <div className="side-user">
@@ -500,6 +570,16 @@ export default function HomePage() {
             </p>
           </div>
           <div className="header-actions">
+            {installPrompt && (
+              <button className="ghost install-app" onClick={async () => { await installPrompt.prompt(); setInstallPrompt(null); }}>
+                <Download /> تثبيت التطبيق
+              </button>
+            )}
+            {offlineQueue > 0 && (
+              <button className="ghost sync-now" disabled={!online || syncing} onClick={() => void runOfflineSync(true)}>
+                <RefreshCw className={syncing ? "spin" : ""} /> {syncing ? "جاري المزامنة" : `مزامنة (${offlineQueue})`}
+              </button>
+            )}
             <button
               className="icon-btn"
               onClick={() => setShowNotifications((v) => !v)}
