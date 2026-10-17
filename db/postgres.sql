@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS incidents (
  cpr INTEGER NOT NULL DEFAULT 0, aed INTEGER NOT NULL DEFAULT 0, drugs INTEGER NOT NULL DEFAULT 0, wound_care INTEGER NOT NULL DEFAULT 0, tourniquet INTEGER NOT NULL DEFAULT 0, immobilization INTEGER NOT NULL DEFAULT 0,
  cervical_collar INTEGER NOT NULL DEFAULT 0, glucose_check INTEGER NOT NULL DEFAULT 0, splinting INTEGER NOT NULL DEFAULT 0, delivery INTEGER NOT NULL DEFAULT 0,
  source_import_key TEXT UNIQUE, source_incident_number TEXT, source_incident_code TEXT, import_batch TEXT, data_quality_status TEXT NOT NULL DEFAULT 'ok', data_quality_notes TEXT,
- fuel_liters DOUBLE PRECISION NOT NULL DEFAULT 0, notes TEXT, incident_status TEXT NOT NULL DEFAULT 'completed', return_time TEXT, approval_status TEXT NOT NULL DEFAULT 'approved', approved_by TEXT, approved_at TIMESTAMPTZ, rejection_reason TEXT, created_by TEXT,
+ fuel_liters DOUBLE PRECISION NOT NULL DEFAULT 0, notes TEXT, incident_status TEXT NOT NULL DEFAULT 'completed', return_time TEXT, entry_time TEXT, approval_status TEXT NOT NULL DEFAULT 'approved', approved_by TEXT, approved_at TIMESTAMPTZ, rejection_reason TEXT, created_by TEXT, created_by_user_id BIGINT REFERENCES user_profiles(id),
  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 -- Upgrade databases created by earlier EMS releases without deleting data.
@@ -32,6 +32,8 @@ CREATE TABLE IF NOT EXISTS incidents (
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS incident_code TEXT;
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS incident_status TEXT NOT NULL DEFAULT 'completed';
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS return_time TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS entry_time TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS created_by_user_id BIGINT REFERENCES user_profiles(id);
 CREATE SEQUENCE IF NOT EXISTS incident_code_seq START WITH 1 INCREMENT BY 1;
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS beneficiary_name TEXT;
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS response_minutes INTEGER NOT NULL DEFAULT 0;
@@ -69,6 +71,8 @@ CREATE TABLE IF NOT EXISTS fuel_fillings (id BIGSERIAL PRIMARY KEY, vehicle_id B
 CREATE TABLE IF NOT EXISTS vehicle_movements (id BIGSERIAL PRIMARY KEY, vehicle_id BIGINT NOT NULL REFERENCES vehicles(id), incident_id BIGINT REFERENCES incidents(id), driver_staff_id BIGINT REFERENCES staff(id), driver_name TEXT, departed_at TEXT NOT NULL, returned_at TEXT, km_start DOUBLE PRECISION NOT NULL, km_end DOUBLE PRECISION, destination TEXT, notes TEXT, created_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS vehicle_maintenance (id BIGSERIAL PRIMARY KEY, vehicle_id BIGINT NOT NULL REFERENCES vehicles(id), station_id BIGINT NOT NULL REFERENCES stations(id), request_date TEXT NOT NULL, department TEXT NOT NULL, odometer_km DOUBLE PRECISION NOT NULL, requested_repair TEXT NOT NULL, failure_cause TEXT, driver_name TEXT NOT NULL, center_manager_name TEXT, circle_manager_name TEXT, attachment_key TEXT NOT NULL, attachment_name TEXT NOT NULL, attachment_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', maintenance_recommendation TEXT, manager_recommendation TEXT, finance_recommendation TEXT, administrative_recommendation TEXT, performed_work TEXT, received_at TEXT, received_by TEXT, created_by TEXT NOT NULL, closed_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS audit_logs (id BIGSERIAL PRIMARY KEY, actor TEXT, action TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT, details TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS actor_user_id BIGINT REFERENCES user_profiles(id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_created ON audit_logs(entity_type, created_at DESC);
 CREATE TABLE IF NOT EXISTS notifications (id BIGSERIAL PRIMARY KEY, recipient TEXT, title TEXT NOT NULL, message TEXT NOT NULL, type TEXT NOT NULL DEFAULT 'info', entity_type TEXT, entity_id TEXT, is_read INTEGER NOT NULL DEFAULT 0, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS system_settings (key TEXT PRIMARY KEY, value TEXT, label TEXT NOT NULL, category TEXT NOT NULL DEFAULT 'general', updated_by TEXT, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE INDEX IF NOT EXISTS idx_maintenance_request_date_station_vehicle ON vehicle_maintenance(request_date,station_id,vehicle_id);
