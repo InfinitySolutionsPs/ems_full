@@ -173,6 +173,7 @@ const emptyForm: Record<string, string> = {
   availableDate: today,
   clearTime: "",
   returnTime: "",
+  returnLocation: "",
   crew: "",
   dispatcherPrimary: "",
   dispatcherSecondary: "",
@@ -1066,6 +1067,7 @@ function IncidentForm({
           {requiresMovement && field("arrivalTime", "وقت الوصول للموقع", "time")}
           {requiresDelivery && field("hospitalTime", "وقت الوصول للمستشفى", "time")}
           {requiresMovement && field("returnTime", "وقت العودة للمحطة", "time")}
+          {incidentStatus === "cancelled_after_dispatch" && field("returnLocation", "مكان الرجوع", "text", true)}
           {requiresMovement && field("clearTime", "وقت الجاهزية", "time")}
         </div>
         <p className="form-section-note">
@@ -1421,6 +1423,7 @@ function Records({
       availableDate: x.available_date || x.call_date || today,
       clearTime: x.clear_time || "",
       returnTime: x.return_time || "",
+      returnLocation: x.return_location || "",
       kmStart: x.km_start || "",
       kmEnd: x.km_end || "",
       dispatcherPrimary: x.dispatcher_primary || "",
@@ -1602,6 +1605,7 @@ function Records({
                 ["hospitalTime", "وقت المستشفى", "time"],
                 ["clearTime", "الجاهزية", "time"],
                 ["returnTime", "العودة للمحطة", "time"],
+                ["returnLocation", "مكان الرجوع", "text"],
                 ["kmStart", "عداد البداية", "number"],
                 ["kmEnd", "عداد النهاية", "number"],
                 ["fuelLiters", "الوقود", "number"],
