@@ -1995,6 +1995,86 @@ tbody tr:hover {
 .chart-report > .recharts-responsive-container {
   padding: 0 18px;
 }
+.incident-trend-report {
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(196, 23, 44, 0.08), transparent 34%),
+    linear-gradient(180deg, #ffffff 0%, #fffdfd 100%);
+}
+.trend-report-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  padding: 0 20px 10px;
+}
+.trend-report-summary article {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: end;
+  gap: 2px 8px;
+  min-height: 84px;
+  padding: 14px 16px;
+  border: 1px solid #eceef2;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.86);
+  box-shadow: 0 8px 22px rgba(16, 24, 40, 0.05);
+}
+.trend-report-summary span {
+  grid-column: 1 / -1;
+  color: #667085;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+.trend-report-summary b {
+  color: #1d2939;
+  font-size: 1.75rem;
+  line-height: 1;
+}
+.trend-report-summary small {
+  color: var(--red);
+  font-weight: 800;
+}
+.report-trend-chart {
+  position: relative;
+  min-height: 330px;
+  padding: 0 12px 4px;
+}
+.report-trend-empty {
+  position: absolute;
+  inset: 42px 48px 42px 48px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px dashed rgba(196, 23, 44, 0.28);
+  border-radius: 20px;
+  background: rgba(255, 249, 250, 0.9);
+  color: #667085;
+  text-align: center;
+}
+.report-trend-empty svg {
+  width: 42px;
+  height: 42px;
+  padding: 9px;
+  border-radius: 14px;
+  background: var(--red-soft);
+  color: var(--red);
+}
+.report-trend-empty b {
+  color: #344054;
+}
+@media (max-width: 650px) {
+  .trend-report-summary {
+    grid-template-columns: 1fr;
+  }
+  .trend-report-summary article {
+    min-height: 72px;
+  }
+  .report-trend-empty {
+    inset: 38px 18px;
+  }
+}
 .capacity-range {
   padding-bottom: 18px;
 }

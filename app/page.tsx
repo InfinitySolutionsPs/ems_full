@@ -3638,6 +3638,21 @@ function ReportContent({
     (x) => !x.dropoff_location && !x.dropoff_type,
   ).length;
   const served = Math.max(0, incidents.length - notTransported);
+  const incidentTimeline = dashboard.timeline || [];
+  const timelineTotal = incidentTimeline.reduce(
+    (sum, item) => sum + Number(item.value || 0),
+    0,
+  );
+  const timelineAverage = incidentTimeline.length
+    ? Math.round(timelineTotal / incidentTimeline.length)
+    : 0;
+  const timelinePeak = incidentTimeline.reduce<
+    { month: string; value: number } | undefined
+  >(
+    (peak, item) =>
+      !peak || Number(item.value || 0) > Number(peak.value || 0) ? item : peak,
+    undefined,
+  );
   return (
     <>
       <section className="report-metrics">
@@ -3662,27 +3677,88 @@ function ReportContent({
           <span>عدد المركبات الفريدة</span>
         </article>
       </section>
-      <section className="panel chart-report">
+      <section className="panel chart-report incident-trend-report">
         <PanelTitle
           icon={Activity}
-          title="اتجاه البلاغات"
-          subtitle="خلال الفترة المحددة"
+          title="نبض البلاغات"
+          subtitle="تغيّر حجم البلاغات شهرياً خلال الفترة المحددة"
         />
-        <ResponsiveContainer width="100%" height={330}>
-          <AreaChart data={dashboard.timeline}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="month" />
-            <YAxis />
-            <Tooltip />
-            <Area
-              type="monotone"
-              dataKey="value"
-              stroke="#c4172c"
-              fill="#fff0f2"
-              strokeWidth={3}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
+        <div className="trend-report-summary">
+          <article>
+            <span>إجمالي الفترة</span>
+            <b>{timelineTotal}</b>
+            <small>بلاغ</small>
+          </article>
+          <article>
+            <span>المتوسط الشهري</span>
+            <b>{timelineAverage}</b>
+            <small>بلاغ</small>
+          </article>
+          <article>
+            <span>أعلى شهر</span>
+            <b>{timelinePeak?.value || 0}</b>
+            <small>{timelinePeak?.month || "—"}</small>
+          </article>
+        </div>
+        <div className="report-trend-chart">
+          <ResponsiveContainer width="100%" height={330}>
+            <AreaChart
+              data={incidentTimeline}
+              margin={{ top: 18, right: 18, left: 0, bottom: 4 }}
+            >
+              <defs>
+                <linearGradient id="reportIncidentGradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#c4172c" stopOpacity={0.34} />
+                  <stop offset="72%" stopColor="#c4172c" stopOpacity={0.08} />
+                  <stop offset="100%" stopColor="#c4172c" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid stroke="#e7e9ee" strokeDasharray="4 6" vertical={false} />
+              <XAxis
+                dataKey="month"
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: "#667085", fontSize: 12 }}
+                tickMargin={12}
+              />
+              <YAxis
+                allowDecimals={false}
+                axisLine={false}
+                tickLine={false}
+                tick={{ fill: "#98a2b3", fontSize: 12 }}
+                width={34}
+              />
+              <Tooltip
+                contentStyle={{
+                  border: "0",
+                  borderRadius: 14,
+                  boxShadow: "0 14px 34px rgba(16,24,40,.14)",
+                  direction: "rtl",
+                }}
+                labelStyle={{ color: "#344054", fontWeight: 800 }}
+              />
+              <Area
+                type="monotone"
+                dataKey="value"
+                name="عدد البلاغات"
+                stroke="#c4172c"
+                fill="url(#reportIncidentGradient)"
+                strokeWidth={4}
+                dot={{ r: 4, fill: "#fff", stroke: "#c4172c", strokeWidth: 3 }}
+                activeDot={{ r: 7, fill: "#c4172c", stroke: "#fff", strokeWidth: 4 }}
+                animationDuration={1100}
+                animationEasing="ease-out"
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+          {!incidentTimeline.length && (
+            <div className="report-trend-empty">
+              <Activity />
+              <b>لا توجد بلاغات ضمن الفترة المحددة</b>
+              <span>غيّري نطاق التاريخ لعرض الحركة الشهرية.</span>
+            </div>
+          )}
+        </div>
       </section>
       <section className="panel chart-report">
         <PanelTitle
