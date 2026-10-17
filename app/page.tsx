@@ -206,26 +206,53 @@ export default function HomePage() {
   );
   const refresh = useCallback(async () => {
     setLoading(true);
+    const fetchWithRetry = async (url: string) => {
+      let lastError: unknown;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const response = await fetch(url, { cache: "no-store" });
+          if (response.status < 500 || attempt === 1) return response;
+        } catch (error) {
+          lastError = error;
+        }
+        await new Promise((resolve) => window.setTimeout(resolve, 450));
+      }
+      throw lastError || new Error("network request failed");
+    };
     try {
-      const [d, r] = await Promise.all([
-        fetch(`/api/dashboard?${query}`),
-        fetch(`/api/incidents?${query}`),
+      const [dashboardResult, recordsResult] = await Promise.allSettled([
+        fetchWithRetry(`/api/dashboard?${query}`),
+        fetchWithRetry(`/api/incidents?${query}`),
       ]);
-      if (r.ok) {
-        const records = await r.json();
-        setIncidents(records.incidents || []);
+
+      if (recordsResult.status === "fulfilled") {
+        const response = recordsResult.value;
+        if (response.ok) {
+          const records = await response.json();
+          setIncidents(records.incidents || []);
+        } else {
+          const recordsError = await response.json().catch(() => ({}));
+          toast.error(
+            recordsError.error || "تعذر تحميل سجل البلاغات. حاول مرة أخرى.",
+          );
+        }
       } else {
-        const recordsError = await r.json().catch(() => ({}));
-        toast.error(recordsError.error || "تعذر تحميل سجل البلاغات. حاول مرة أخرى.");
+        toast.error("تعذر الاتصال بسجل البلاغات. حاول مرة أخرى.");
       }
-      if (d.ok) {
-        setDashboard(await d.json());
+
+      if (dashboardResult.status === "fulfilled") {
+        const response = dashboardResult.value;
+        if (response.ok) {
+          setDashboard(await response.json());
+        } else {
+          const dashboardError = await response.json().catch(() => ({}));
+          toast.error(
+            dashboardError.error || "تعذر تحميل لوحة المؤشرات. حاول مرة أخرى.",
+          );
+        }
       } else {
-        const dashboardError = await d.json().catch(() => ({}));
-        toast.error(dashboardError.error || "تعذر تحميل لوحة المؤشرات. حاول مرة أخرى.");
+        toast.error("تعذر الاتصال بلوحة المؤشرات. حاول مرة أخرى.");
       }
-    } catch {
-      toast.error("تعذر الاتصال بالنظام. حاول مرة أخرى.");
     } finally {
       setLoading(false);
     }
