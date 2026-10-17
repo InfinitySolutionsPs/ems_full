@@ -24,12 +24,15 @@ CREATE TABLE IF NOT EXISTS incidents (
  cpr INTEGER NOT NULL DEFAULT 0, aed INTEGER NOT NULL DEFAULT 0, drugs INTEGER NOT NULL DEFAULT 0, wound_care INTEGER NOT NULL DEFAULT 0, tourniquet INTEGER NOT NULL DEFAULT 0, immobilization INTEGER NOT NULL DEFAULT 0,
  cervical_collar INTEGER NOT NULL DEFAULT 0, glucose_check INTEGER NOT NULL DEFAULT 0, splinting INTEGER NOT NULL DEFAULT 0, delivery INTEGER NOT NULL DEFAULT 0,
  source_import_key TEXT UNIQUE, source_incident_number TEXT, source_incident_code TEXT, import_batch TEXT, data_quality_status TEXT NOT NULL DEFAULT 'ok', data_quality_notes TEXT,
- fuel_liters DOUBLE PRECISION NOT NULL DEFAULT 0, notes TEXT, approval_status TEXT NOT NULL DEFAULT 'approved', approved_by TEXT, approved_at TIMESTAMPTZ, rejection_reason TEXT, created_by TEXT,
+ fuel_liters DOUBLE PRECISION NOT NULL DEFAULT 0, notes TEXT, incident_status TEXT NOT NULL DEFAULT 'completed', return_time TEXT, approval_status TEXT NOT NULL DEFAULT 'approved', approved_by TEXT, approved_at TIMESTAMPTZ, rejection_reason TEXT, created_by TEXT,
  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 -- Upgrade databases created by earlier EMS releases without deleting data.
 -- CREATE TABLE IF NOT EXISTS does not add newly introduced columns.
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS incident_code TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS incident_status TEXT NOT NULL DEFAULT 'completed';
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS return_time TEXT;
+CREATE SEQUENCE IF NOT EXISTS incident_code_seq START WITH 1 INCREMENT BY 1;
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS beneficiary_name TEXT;
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS response_minutes INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS service_minutes INTEGER NOT NULL DEFAULT 0;
@@ -50,6 +53,13 @@ WHERE source_import_key IS NOT NULL AND EXISTS (
   SELECT 1 FROM incidents original WHERE original.source_import_key=duplicate.source_import_key AND original.id<duplicate.id
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_incidents_source_import_key ON incidents(source_import_key) WHERE source_import_key IS NOT NULL;
+UPDATE incidents duplicate SET incident_code=NULL
+WHERE incident_code IS NOT NULL AND trim(incident_code)<>'' AND EXISTS (
+  SELECT 1 FROM incidents original WHERE original.incident_code=duplicate.incident_code AND original.id<duplicate.id
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_incidents_incident_code ON incidents(incident_code) WHERE incident_code IS NOT NULL AND trim(incident_code)<>'';
+UPDATE incidents SET incident_status=CASE WHEN cancelled=1 THEN 'cancelled_after_dispatch' ELSE 'completed' END
+WHERE incident_status IS NULL OR trim(incident_status)='';
 CREATE INDEX IF NOT EXISTS idx_incidents_call_date_time ON incidents(call_date DESC, call_time DESC);
 CREATE INDEX IF NOT EXISTS idx_incidents_governorate_category_date ON incidents(pickup_governorate, category, call_date DESC);
 CREATE INDEX IF NOT EXISTS idx_incidents_station_date ON incidents(station, call_date DESC);

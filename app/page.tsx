@@ -110,7 +110,27 @@ const urgencyArabic: Record<string, string> = {
   Red: "حمراء",
   Yellow: "صفراء",
   Green: "خضراء",
+  Black: "سوداء",
   "N/A": "غير مصنفة",
+};
+const hospitals = [
+  "مجمع الشفاء الطبي",
+  "مستشفى الأهلي العربي",
+  "مستشفى القدس",
+  "مستشفى الأمل",
+  "مستشفى شهداء الأقصى",
+  "مستشفى ناصر الطبي",
+  "مستشفى غزة الأوروبي",
+  "مستشفى الكويت التخصصي",
+  "مستشفى العودة",
+  "المستشفى الإندونيسي",
+  "مستشفى كمال عدوان",
+  "المستشفى الميداني الأردني",
+  "المستشفى الميداني الإماراتي",
+];
+const currentSystemTime = () => {
+  const value = new Date();
+  return `${String(value.getHours()).padStart(2, "0")}:${String(value.getMinutes()).padStart(2, "0")}`;
 };
 const palette = ["#c4172c", "#ef6a78", "#9c1d2d", "#f4a3ac", "#6e1423"];
 const today = new Date().toISOString().slice(0, 10);
@@ -118,6 +138,7 @@ const monthStart = `${today.slice(0, 7)}-01`;
 const emptyForm: Record<string, string> = {
   incidentNumber: "",
   incidentCode: "",
+  incidentStatus: "completed",
   beneficiaryName: "",
   gender: "",
   contact: "",
@@ -139,7 +160,7 @@ const emptyForm: Record<string, string> = {
   kmStart: "",
   kmEnd: "",
   callDate: today,
-  callTime: "",
+  callTime: currentSystemTime(),
   dispatchDate: today,
   dispatchTime: "",
   onSceneDate: today,
@@ -148,6 +169,7 @@ const emptyForm: Record<string, string> = {
   hospitalTime: "",
   availableDate: today,
   clearTime: "",
+  returnTime: "",
   crew: "",
   dispatcherPrimary: "",
   dispatcherSecondary: "",
@@ -185,7 +207,7 @@ export default function HomePage() {
       governorate: "all",
       category: "all",
     }),
-    [form, setForm] = useState(emptyForm);
+    [form, setForm] = useState(() => ({ ...emptyForm, callTime: currentSystemTime() }));
   const [notifications, setNotifications] = useState<any[]>([]),
     [showNotifications, setShowNotifications] = useState(false),
     [pending, setPending] = useState<Incident[]>([]),
@@ -281,6 +303,29 @@ export default function HomePage() {
     }, 800);
     return () => window.clearTimeout(timer);
   }, [loadAux]);
+  useEffect(() => {
+    if (view !== "new" || form.incidentCode) return;
+    const controller = new AbortController();
+    fetch("/api/incidents?mode=next-code", {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "تعذر إنشاء كود البلاغ");
+        setForm((current) => ({
+          ...current,
+          incidentCode: result.code,
+          incidentNumber: result.code,
+          callTime: current.callTime || currentSystemTime(),
+        }));
+      })
+      .catch((error) => {
+        if (error?.name !== "AbortError")
+          toast.error("تعذر إنشاء كود البلاغ تلقائيًا");
+      });
+    return () => controller.abort();
+  }, [view, form.incidentCode]);
   const setField = (key: string, value: string) =>
     setForm((v) => ({ ...v, [key]: value }));
   const submit = async (e: React.FormEvent) => {
@@ -296,7 +341,7 @@ export default function HomePage() {
       return;
     }
     toast.success(`تم حفظ البلاغ ${form.incidentNumber}`);
-    setForm({ ...emptyForm, callDate: today });
+    setForm({ ...emptyForm, callDate: today, callTime: currentSystemTime() });
     setView("dashboard");
     refresh();
     loadAux();
@@ -908,6 +953,9 @@ function IncidentForm({
     ? (vehicles || []).filter((v:any) => v.active !== 0 && Number(v.station_id) === Number(selectedStation.id))
     : [];
   const selectedVehicle = (vehicles || []).find((v:any)=>v.plate_number===form.vehicle);
+  const incidentStatus = form.incidentStatus || "completed";
+  const requiresMovement = incidentStatus !== "cancelled_before_dispatch";
+  const requiresDelivery = incidentStatus === "completed";
   const field = (
     name: string,
     label: string,
@@ -921,7 +969,12 @@ function IncidentForm({
         type={type}
         value={form[name]}
         required={required}
-        onChange={(e) => setField(name, e.target.value)}
+        onChange={(e) => {
+          const value = e.target.value;
+          setField(name, value);
+          if (name === "caseType" && /وفاة|شهيد|جث/i.test(value))
+            setField("urgency", "Black");
+        }}
       />
     </label>
   );
@@ -938,7 +991,12 @@ function IncidentForm({
       <select
         value={form[name]}
         required={required}
-        onChange={(e) => setField(name, e.target.value)}
+        onChange={(e) => {
+          const value = e.target.value;
+          setField(name, value);
+          if (name === "category" && value === "Martyr")
+            setField("urgency", "Black");
+        }}
       >
         <option value="">اختر...</option>
         {options.map((x) => (
@@ -956,38 +1014,53 @@ function IncidentForm({
           <Ambulance />
         </div>
         <div>
-          <h2>بيانات البلاغ</h2>
-          <p>الحقول المعلّمة بنجمة مطلوبة للحفظ</p>
+          <h2>تسجيل بلاغ جديد</h2>
+          <p>يُنشأ كود موحد تلقائيًا، وتتغير الحقول المطلوبة حسب حالة البلاغ</p>
         </div>
         <div className="auto-number">
-          <span>رقم البلاغ</span>
+          <span>كود البلاغ</span>
           <input
-            placeholder="EMS-2026-0001"
-            value={form.incidentNumber}
-            onChange={(e) => setField("incidentNumber", e.target.value)}
+            placeholder="يُنشأ تلقائيًا"
+            value={form.incidentCode}
+            readOnly
             required
           />
         </div>
       </section>
-      <FormSection icon={UserRound} title="بيانات المستفيد">
-        <div className="form-grid cols-4">
-          {field("beneficiaryName", "الاسم الكامل")}
-          {select("gender", "الجنس", ["Male", "Female", "Unknown"], true, {
-            Male: "ذكر",
-            Female: "أنثى",
-            Unknown: "غير معروف",
-          })}
-          {field("age", "العمر", "number")}
-          {field("contact", "رقم التواصل", "tel")}
+
+      <FormSection icon={Clock3} title="حالة البلاغ والتوقيتات">
+        <div className="form-grid cols-3">
           {select(
-            "urgency",
-            "درجة الأولوية",
-            ["Red", "Yellow", "Green", "N/A"],
+            "incidentStatus",
+            "حالة البلاغ",
+            ["completed", "cancelled_before_dispatch", "cancelled_after_dispatch"],
             true,
-            urgencyArabic,
+            {
+              completed: "عملية النقل مكتملة",
+              cancelled_before_dispatch: "ملغي قبل تحرك المركبة",
+              cancelled_after_dispatch: "ملغي بعد تحرك المركبة",
+            },
           )}
+          {field("callDate", "تاريخ البلاغ", "date", true)}
+          <label>
+            وقت استلام البلاغ <em>*</em>
+            <input type="time" value={form.callTime} readOnly required />
+          </label>
+          {requiresMovement && field("dispatchTime", "وقت تحرك المركبة", "time")}
+          {requiresMovement && field("arrivalTime", "وقت الوصول للموقع", "time")}
+          {requiresDelivery && field("hospitalTime", "وقت الوصول للمستشفى", "time")}
+          {requiresMovement && field("returnTime", "وقت العودة للمحطة", "time")}
+          {requiresMovement && field("clearTime", "وقت الجاهزية", "time")}
         </div>
+        <p className="form-section-note">
+          {incidentStatus === "cancelled_before_dispatch"
+            ? "لن يطلب النظام بيانات المركبة أو الحركة أو تسليم الحالة."
+            : incidentStatus === "cancelled_after_dispatch"
+              ? "سيتم تسجيل بيانات الحركة والمركبة دون طلب بيانات تسليم الحالة للمستشفى."
+              : "سيتم تسجيل مسار البلاغ كاملًا حتى تسليم الحالة وعودة المركبة."}
+        </p>
       </FormSection>
+
       <FormSection icon={Siren} title="تصنيف الحالة">
         <div className="form-grid cols-3">
           {select(
@@ -998,63 +1071,190 @@ function IncidentForm({
             categoryArabic,
           )}
           {field("caseType", "نوع الحالة", "text", true)}
-          {field("incidentCode", "رمز الحالة")}
+          {select(
+            "urgency",
+            "درجة الأولوية",
+            ["Red", "Yellow", "Green", "Black", "N/A"],
+            true,
+            urgencyArabic,
+          )}
         </div>
       </FormSection>
-      <FormSection icon={MapPin} title="موقع الالتقاط والتسليم">
+
+      <FormSection icon={MapPin} title="استلام الحالة وتسليمها">
         <div className="form-grid cols-4">
           {select("pickupGovernorate", "المحافظة", governors, true)}
           {field("pickupMunicipality", "البلدية")}
           {field("pickupNeighborhood", "الحي")}
-          {select("pickupType", "نوع موقع الالتقاط", [
+          {select("pickupType", "مكان استلام الحالة", [
             "House",
             "Shelter/tent",
             "Street",
             "Field",
             "Clinic (Public)",
-          ])}
-          {field("pickupLocation", "وصف الموقع")}
-          {select("dropoffType", "نوع جهة التسليم", [
-            "Hospital (Public)",
-            "Hospital (Private)",
-            "Hospital (Field)",
-            "No transport (no need)",
-          ])}
-          {field("dropoffLocation", "جهة التسليم")}
+            "Hospital",
+          ], false, {
+            House: "منزل",
+            "Shelter/tent": "مأوى / خيمة",
+            Street: "شارع",
+            Field: "ميدان",
+            "Clinic (Public)": "عيادة",
+            Hospital: "مستشفى",
+          })}
+          {field("pickupLocation", "وصف مكان الاستلام")}
+          {requiresDelivery &&
+            select("dropoffType", "نوع جهة التسليم", [
+              "Hospital (Public)",
+              "Hospital (Private)",
+              "Hospital (Field)",
+              "No transport (no need)",
+            ], false, {
+              "Hospital (Public)": "مستشفى حكومي",
+              "Hospital (Private)": "مستشفى خاص",
+              "Hospital (Field)": "مستشفى ميداني",
+              "No transport (no need)": "لا يحتاج إلى نقل",
+            })}
+          {requiresDelivery &&
+            form.dropoffType.startsWith("Hospital") &&
+            select("dropoffLocation", "المستشفى المستلم", hospitals, true)}
         </div>
       </FormSection>
-      <FormSection icon={Ambulance} title="المحطة والمركبة">
+
+      <FormSection icon={Ambulance} title="المركز والمحطة والمركبة">
         <div className="form-grid cols-4">
-          <label>المركز <em>*</em><select required value={form.center} onChange={e=>{setField("center",e.target.value);setField("station","");setField("vehicle","");setField("kmStart","");setField("kmEnd","");}}><option value="">اختر المركز...</option>{(centers||[]).filter((c:any)=>c.active!==0).map((c:any)=><option key={c.id} value={c.id}>{c.name}</option>)}</select></label>
-          <label>المحطة <em>*</em><select required disabled={!form.center} value={form.station} onChange={e=>{setField("station",e.target.value);setField("vehicle","");setField("kmStart","");setField("kmEnd","");}}><option value="">{form.center?"اختر المحطة...":"اختر المركز أولًا"}</option>{availableStations.filter((s:any)=>s.active!==0).map((s:any)=><option key={s.id} value={s.name}>{s.name}</option>)}</select></label>
+          <label>
+            المركز <em>*</em>
+            <select
+              required
+              value={form.center}
+              onChange={(e) => {
+                setField("center", e.target.value);
+                setField("station", "");
+                setField("vehicle", "");
+                setField("kmStart", "");
+                setField("kmEnd", "");
+              }}
+            >
+              <option value="">اختر المركز...</option>
+              {(centers || [])
+                .filter((c: any) => c.active !== 0)
+                .map((c: any) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+            </select>
+          </label>
+          <label>
+            المحطة <em>*</em>
+            <select
+              required
+              disabled={!form.center}
+              value={form.station}
+              onChange={(e) => {
+                setField("station", e.target.value);
+                setField("vehicle", "");
+                setField("kmStart", "");
+                setField("kmEnd", "");
+              }}
+            >
+              <option value="">
+                {form.center ? "اختر المحطة..." : "اختر المركز أولًا"}
+              </option>
+              {availableStations
+                .filter((s: any) => s.active !== 0)
+                .map((s: any) => (
+                  <option key={s.id} value={s.name}>{s.name}</option>
+                ))}
+            </select>
+          </label>
           {select("shift", "الوردية", ["A", "B", "C"], true)}
-          <label>رقم المركبة<select disabled={!selectedStation} value={form.vehicle} onChange={e=>{const plate=e.target.value;const vehicle=(vehicles||[]).find((v:any)=>v.plate_number===plate);setField("vehicle",plate);setField("kmStart",plate?String(Number(vehicle?.mileage_km||0)):"");setField("kmEnd","");}}><option value="">{!selectedStation?"اختر المحطة أولًا":availableVehicles.length?"بدون مركبة":"لا توجد مركبات مرتبطة بالمحطة"}</option>{form.vehicle && !(vehicles||[]).some((v:any)=>v.plate_number===form.vehicle) && <option value={form.vehicle}>{form.vehicle} (رقم سابق)</option>}{availableVehicles.map((v:any)=><option key={v.id} value={v.plate_number}>{v.plate_number} — {v.fuel_type||"وقود غير محدد"}</option>)}</select></label>
-          {field("crew", "أفراد الطاقم")}
-          <label>عداد البداية<input type="number" readOnly value={form.kmStart} placeholder="يُقرأ من المركبة" /></label>
-          <label>عداد النهاية<input type="number" min={Number(selectedVehicle?.mileage_km||0)} disabled={!form.vehicle} value={form.kmEnd} onChange={e=>setField("kmEnd",e.target.value)} /></label>
-          {field("fuelLiters", "الوقود باللتر", "number")}
+          {requiresMovement && (
+            <label>
+              رقم المركبة <em>*</em>
+              <select
+                required
+                disabled={!selectedStation}
+                value={form.vehicle}
+                onChange={(e) => {
+                  const plate = e.target.value;
+                  const vehicle = (vehicles || []).find(
+                    (v: any) => v.plate_number === plate,
+                  );
+                  setField("vehicle", plate);
+                  setField(
+                    "kmStart",
+                    plate ? String(Number(vehicle?.mileage_km || 0)) : "",
+                  );
+                  setField("kmEnd", "");
+                }}
+              >
+                <option value="">
+                  {!selectedStation
+                    ? "اختر المحطة أولًا"
+                    : availableVehicles.length
+                      ? "اختر المركبة..."
+                      : "لا توجد مركبات مرتبطة بالمحطة"}
+                </option>
+                {availableVehicles.map((v: any) => (
+                  <option key={v.id} value={v.plate_number}>
+                    {v.plate_number} — {v.fuel_type || "وقود غير محدد"}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {requiresMovement && (
+            <label>
+              عداد البداية
+              <input
+                type="number"
+                readOnly
+                value={form.kmStart}
+                placeholder="يُقرأ من المركبة"
+              />
+            </label>
+          )}
+          {requiresMovement && (
+            <label>
+              عداد النهاية
+              <input
+                type="number"
+                min={Number(selectedVehicle?.mileage_km || 0)}
+                disabled={!form.vehicle}
+                value={form.kmEnd}
+                onChange={(e) => setField("kmEnd", e.target.value)}
+              />
+            </label>
+          )}
+          {requiresMovement && field("fuelLiters", "الوقود باللتر", "number")}
         </div>
       </FormSection>
-      <FormSection icon={Clock3} title="التوقيتات">
-        <p className="form-section-note">يُستخدم تاريخ البلاغ لجميع مراحل الحركة؛ أدخل الساعة والدقائق لكل مرحلة فقط.</p>
+
+      {requiresMovement && (
+        <FormSection icon={UsersRound} title="طاقم البلاغ">
+          <div className="form-grid cols-5">
+            {field("dispatcherPrimary", "المستقبل الرئيسي")}
+            {field("dispatcherSecondary", "المستقبل المساند")}
+            {field("emtDriver", "المسعف السائق")}
+            {field("emtLead", "مسعف قائد")}
+            {field("emtAssist", "مسعف مساعد")}
+            {field("crew", "أفراد الطاقم")}
+          </div>
+        </FormSection>
+      )}
+
+      <FormSection icon={UserRound} title="بيانات المستفيد">
         <div className="form-grid cols-4">
-          {field("callDate", "تاريخ البلاغ", "date", true)}
-          {field("callTime", "وقت البلاغ", "time", true)}
-          {field("dispatchTime", "وقت التحريك", "time")}
-          {field("arrivalTime", "وقت الوصول للموقع", "time")}
-          {field("hospitalTime", "وقت الوصول للمستشفى", "time")}
-          {field("clearTime", "وقت الجاهزية", "time")}
+          {field("beneficiaryName", "الاسم الكامل")}
+          {select("gender", "الجنس", ["Male", "Female", "Unknown"], true, {
+            Male: "ذكر",
+            Female: "أنثى",
+            Unknown: "غير معروف",
+          })}
+          {field("age", "العمر", "number")}
+          {field("contact", "رقم التواصل", "tel")}
         </div>
       </FormSection>
-      <FormSection icon={UsersRound} title="طاقم البلاغ">
-        <div className="form-grid cols-5">
-          {field("dispatcherPrimary", "المستقبل الرئيسي")}
-          {field("dispatcherSecondary", "المستقبل المساند")}
-          {field("emtDriver", "المسعف السائق")}
-          {field("emtLead", "مسعف قائد")}
-          {field("emtAssist", "مسعف مساعد")}
-        </div>
-      </FormSection>
+
       <FormSection icon={Activity} title="التدخلات والملاحظات">
         <div className="form-grid cols-3">
           {field("chiefComplaint", "الشكوى الرئيسية")}
@@ -1076,20 +1276,44 @@ function IncidentForm({
           </label>
         </div>
         <div className="check-grid">
-          {[["cancelled","بلاغ ملغي"],["patientDeceased","وفاة المستفيد"],["conflictRelated","مرتبط بالنزاع"],["oxygen","أكسجين"],["bvm","BVM"],["airway","مجرى هوائي"],["cpr","إنعاش CPR"],["aed","جهاز AED"],["drugs","أدوية"],["woundCare","عناية بالجروح"],["tourniquet","عاصبة"],["immobilization","تثبيت"],["cervicalCollar","طوق رقبة"],["glucoseCheck","فحص سكر"],["splinting","جبيرة"],["delivery","ولادة"]].map(([key,label])=>(
-            <label className="check-card" key={key}><input type="checkbox" checked={form[key]==="1"} onChange={e=>setField(key,e.target.checked?"1":"")} /><span>{label}</span></label>
+          {[
+            ["patientDeceased", "وفاة المستفيد"],
+            ["conflictRelated", "مرتبط بالنزاع"],
+            ["oxygen", "أكسجين"],
+            ["bvm", "BVM"],
+            ["airway", "مجرى هوائي"],
+            ["cpr", "إنعاش CPR"],
+            ["aed", "جهاز AED"],
+            ["drugs", "أدوية"],
+            ["woundCare", "عناية بالجروح"],
+            ["tourniquet", "عاصبة"],
+            ["immobilization", "تثبيت"],
+            ["cervicalCollar", "طوق رقبة"],
+            ["glucoseCheck", "فحص سكر"],
+            ["splinting", "جبيرة"],
+            ["delivery", "ولادة"],
+          ].map(([key, label]) => (
+            <label className="check-card" key={key}>
+              <input
+                type="checkbox"
+                checked={form[key] === "1"}
+                onChange={(e) => {
+                  setField(key, e.target.checked ? "1" : "");
+                  if (key === "patientDeceased" && e.target.checked)
+                    setField("urgency", "Black");
+                }
+              />
+              <span>{label}</span>
+            </label>
           ))}
         </div>
       </FormSection>
+
       <div className="form-actions">
-        <button
-          type="button"
-          className="ghost"
-          onClick={() => location.reload()}
-        >
+        <button type="button" className="ghost" onClick={() => location.reload()}>
           <X /> إلغاء
         </button>
-        <button className="primary" type="submit">
+        <button className="primary" type="submit" disabled={!form.incidentCode}>
           <Save /> حفظ البلاغ
         </button>
       </div>
