@@ -207,7 +207,10 @@ export default function HomePage() {
       governorate: "all",
       category: "all",
     }),
-    [form, setForm] = useState(() => ({ ...emptyForm, callTime: currentSystemTime() }));
+    [form, setForm] = useState<Record<string, string>>(() => ({
+      ...emptyForm,
+      callTime: currentSystemTime(),
+    }));
   const [notifications, setNotifications] = useState<any[]>([]),
     [showNotifications, setShowNotifications] = useState(false),
     [pending, setPending] = useState<Incident[]>([]),
