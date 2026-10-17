@@ -206,11 +206,15 @@ export const incidents = sqliteTable("incidents", {
   dataQualityNotes: text("data_quality_notes"),
   fuelLiters: real("fuel_liters").notNull().default(0),
   notes: text("notes"),
+  incidentStatus: text("incident_status").notNull().default("completed"),
+  returnTime: text("return_time"),
+  entryTime: text("entry_time"),
   approvalStatus: text("approval_status").notNull().default("approved"),
   approvedBy: text("approved_by"),
   approvedAt: text("approved_at"),
   rejectionReason: text("rejection_reason"),
   createdBy: text("created_by"),
+  createdByUserId: integer("created_by_user_id"),
   createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
   updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
 });
@@ -230,6 +234,7 @@ export const auditLogs = sqliteTable("audit_logs", {
   entityType: text("entity_type").notNull(),
   entityId: text("entity_id"),
   details: text("details"),
+  actorUserId: integer("actor_user_id"),
   createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
 });
 export const notifications = sqliteTable("notifications", {
