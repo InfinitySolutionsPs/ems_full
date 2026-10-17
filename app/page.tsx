@@ -226,6 +226,9 @@ export default function HomePage() {
       staff: [],
       settings: [],
     });
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("new") === "1") setView("new");
+  }, []);
   const query = useMemo(
     () => new URLSearchParams(filters).toString(),
     [filters],
@@ -508,7 +511,7 @@ export default function HomePage() {
                 </span>
               )}
             </button>
-            <button className="primary compact" onClick={() => setView("new")}>
+            <button className="primary compact" onClick={() => window.open("/?new=1", "_blank", "noopener,noreferrer")}>
               <PlusCircle /> بلاغ جديد
             </button>
           </div>
@@ -1024,7 +1027,7 @@ function IncidentForm({
     </label>
   );
   return (
-    <form className="incident-form" onSubmit={submit}>
+    <form className="incident-form" onSubmit={submit} noValidate>
       <section className="form-hero">
         <div className="round-icon large">
           <Ambulance />
@@ -1443,7 +1446,7 @@ function Records({
       notes: x.notes || "",
     });
   };
-  const updateIncident = async () => { setSaving(true); try { const submissionAction=selected?.approval_status==="approved"?"approve":"draft"; const r=await fetch("/api/incidents",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({...incidentDraft,submissionAction})}); const v=await r.json(); if(!r.ok) throw Error(v.error||"تعذر تعديل البلاغ"); toast.success(submissionAction==="approve"?"تم حفظ تعديل البلاغ المعتمد":"تم حفظ تعديل المسودة"); setSelected(null); setEditing(false); onRefresh(); } catch(e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setSaving(false); } };
+  const updateIncident = async (requestedAction?:"draft"|"approve") => { setSaving(true); try { const submissionAction=requestedAction||(selected?.approval_status==="approved"?"approve":"draft"); const r=await fetch("/api/incidents",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({...incidentDraft,submissionAction})}); const v=await r.json(); if(!r.ok) throw Error(v.error||"تعذر تعديل البلاغ"); toast.success(submissionAction==="approve"?"تم اعتماد البلاغ وحفظ بياناته":"تم حفظ المسودة بالوضع الحالي"); setSelected(null); setEditing(false); onRefresh(); } catch(e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setSaving(false); } };
   const deleteIncident = async () => { if(!isAdmin || !selected) return; if(!window.confirm(`هل تريدين حذف البلاغ ${selected.incident_number} نهائيًا؟`)) return; setSaving(true); try { const r=await fetch(`/api/incidents?id=${selected.id}`,{method:"DELETE"}); const v=await r.json(); if(!r.ok) throw Error(v.error||"تعذر حذف البلاغ"); toast.success("تم حذف البلاغ"); setSelected(null); onRefresh(); } catch(e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setSaving(false); } };
   const mayEditSelected = !!selected && (selected.approval_status === "approved" ? canEditApproved : canEdit || (selected.approval_status === "draft" && Number(selected.created_by_user_id) === Number(currentUser?.id)));
   return (
@@ -1657,7 +1660,7 @@ function Records({
                 إغلاق
               </button>
               {isAdmin && <button className="danger-button" onClick={deleteIncident} disabled={saving}><Trash2/> حذف البلاغ</button>}
-              {editing ? <button className="primary" onClick={updateIncident} disabled={saving}><Save/> حفظ التعديل</button> : mayEditSelected ? <button className="primary" onClick={() => setEditing(true)}><Pencil/> تعديل البلاغ</button> : <span className="locked-record"><ShieldCheck/> البلاغ المعتمد مقفل</span>}
+              {editing ? <><button className="ghost save-draft" onClick={()=>void updateIncident("draft")} disabled={saving}><Save/> حفظ كمسودة</button>{selected.approval_status==="draft"&&<button className="primary" onClick={()=>void updateIncident("approve")} disabled={saving}><ClipboardCheck/> اعتماد البلاغ</button>}{selected.approval_status==="approved"&&<button className="primary" onClick={()=>void updateIncident("approve")} disabled={saving}><Save/> حفظ التعديل المعتمد</button>}</> : mayEditSelected ? <button className="primary" onClick={() => setEditing(true)}><Pencil/> تعديل البلاغ</button> : <span className="locked-record"><ShieldCheck/> البلاغ المعتمد مقفل</span>}
             </div>
           </section>
         </div>
