@@ -321,7 +321,9 @@ export default function HomePage() {
         }));
       })
       .catch((error) => {
-        if (error?.name !== "AbortError")
+        if (
+          !(error instanceof DOMException && error.name === "AbortError")
+        )
           toast.error("تعذر إنشاء كود البلاغ تلقائيًا");
       });
     return () => controller.abort();
@@ -1301,7 +1303,7 @@ function IncidentForm({
                   setField(key, e.target.checked ? "1" : "");
                   if (key === "patientDeceased" && e.target.checked)
                     setField("urgency", "Black");
-                }
+                }}
               />
               <span>{label}</span>
             </label>
