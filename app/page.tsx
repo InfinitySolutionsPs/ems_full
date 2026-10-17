@@ -3638,7 +3638,16 @@ function ReportContent({
     (x) => !x.dropoff_location && !x.dropoff_type,
   ).length;
   const served = Math.max(0, incidents.length - notTransported);
-  const incidentTimeline = dashboard.timeline || [];
+  const incidentTimeline = dashboard.timeline?.length
+    ? dashboard.timeline
+    : Number(dashboard.summary.total || 0) > 0
+      ? [
+          {
+            month: "الفترة المحددة",
+            value: Number(dashboard.summary.total || 0),
+          },
+        ]
+      : [];
   const timelineTotal = incidentTimeline.reduce(
     (sum, item) => sum + Number(item.value || 0),
     0,
