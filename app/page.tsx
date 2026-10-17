@@ -50,6 +50,8 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -3711,17 +3713,10 @@ function ReportContent({
         </div>
         <div className="report-trend-chart">
           <ResponsiveContainer width="100%" height={330}>
-            <AreaChart
+            <LineChart
               data={incidentTimeline}
               margin={{ top: 18, right: 18, left: 0, bottom: 4 }}
             >
-              <defs>
-                <linearGradient id="reportIncidentGradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#c4172c" stopOpacity={0.34} />
-                  <stop offset="72%" stopColor="#c4172c" stopOpacity={0.08} />
-                  <stop offset="100%" stopColor="#c4172c" stopOpacity={0} />
-                </linearGradient>
-              </defs>
               <CartesianGrid stroke="#e7e9ee" strokeDasharray="4 6" vertical={false} />
               <XAxis
                 dataKey="month"
@@ -3738,6 +3733,7 @@ function ReportContent({
                 width={34}
               />
               <Tooltip
+                cursor={{ stroke: "#f3b7bf", strokeWidth: 2, strokeDasharray: "5 5" }}
                 contentStyle={{
                   border: "0",
                   borderRadius: 14,
@@ -3746,19 +3742,19 @@ function ReportContent({
                 }}
                 labelStyle={{ color: "#344054", fontWeight: 800 }}
               />
-              <Area
+              <Line
                 type="monotone"
                 dataKey="value"
                 name="عدد البلاغات"
                 stroke="#c4172c"
-                fill="url(#reportIncidentGradient)"
                 strokeWidth={4}
-                dot={{ r: 4, fill: "#fff", stroke: "#c4172c", strokeWidth: 3 }}
-                activeDot={{ r: 7, fill: "#c4172c", stroke: "#fff", strokeWidth: 4 }}
+                dot={{ r: 5, fill: "#fff", stroke: "#c4172c", strokeWidth: 3 }}
+                activeDot={{ r: 8, fill: "#c4172c", stroke: "#fff", strokeWidth: 4 }}
+                connectNulls
                 animationDuration={1100}
                 animationEasing="ease-out"
               />
-            </AreaChart>
+            </LineChart>
           </ResponsiveContainer>
           {!incidentTimeline.length && (
             <div className="report-trend-empty">
