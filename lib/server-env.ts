@@ -15,16 +15,26 @@ let initialized: Promise<void> | undefined;
 function database() {
   if (!pool) {
     if (!process.env.DATABASE_URL) throw new Error("DATABASE_URL is required");
-    pool = new Pool({ connectionString: process.env.DATABASE_URL });
+    pool = new Pool({
+      connectionString: process.env.DATABASE_URL,
+      max: 12,
+      connectionTimeoutMillis: 10000,
+      idleTimeoutMillis: 30000,
+    });
   }
   return pool;
 }
 
 async function init() {
-  if (!initialized) initialized = (async () => {
-    const sql = await readFile(path.join(process.cwd(), "db/postgres.sql"), "utf8");
-    await database().query(sql);
-  })();
+  if (!initialized) {
+    initialized = (async () => {
+      const sql = await readFile(path.join(process.cwd(), "db/postgres.sql"), "utf8");
+      await database().query(sql);
+    })().catch((error) => {
+      initialized = undefined;
+      throw error;
+    });
+  }
   return initialized;
 }
 
