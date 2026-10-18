@@ -21,7 +21,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="ar" dir="rtl">
+    <html lang="ar-u-nu-latn-hc-h23" dir="rtl">
       <head>
         <script dangerouslySetInnerHTML={{ __html: chunkRecovery }} />
       </head>
