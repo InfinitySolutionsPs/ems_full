@@ -87,6 +87,8 @@ export async function POST(request: NextRequest) {
       env.DB.prepare("UPDATE vehicles SET active=0,service_status='maintenance',out_of_service_reason='طلب صيانة مفتوح' WHERE id=? AND EXISTS (SELECT 1 FROM vehicle_maintenance WHERE attachment_key=? AND status='open')").bind(vehicleId,key),
     ]);
     if (!insert.meta.changes) { await bucket().delete(key); return error("فُتح طلب صيانة لهذه المركبة بالفعل؛ حدّثي القائمة"); }
+    const sourceIncidentCode = str(form.get("sourceIncidentCode"));
+    if (sourceIncidentCode) await env.DB.prepare("UPDATE incidents SET maintenance_request_id=? WHERE incident_code=?").bind(insert.meta.last_row_id,sourceIncidentCode).run();
     return NextResponse.json({ ok: true, id: insert.meta.last_row_id }, { status: 201 });
   } catch {
     await bucket().delete(key).catch(() => undefined);
