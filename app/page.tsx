@@ -236,6 +236,7 @@ export default function HomePage() {
   const [passwordDraft,setPasswordDraft]=useState({currentPassword:"",newPassword:"",confirmPassword:""});
   const [passwordBusy,setPasswordBusy]=useState(false);
   const reminderStarted=useRef(false);
+  const refreshRequestId=useRef(0);
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("new") === "1") setView("new");
   }, []);
@@ -244,17 +245,23 @@ export default function HomePage() {
     [filters],
   );
   const refresh = useCallback(async () => {
+    const requestId=++refreshRequestId.current;
     setLoading(true);
     const fetchWithRetry = async (url: string) => {
       let lastError: unknown;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
+      const retryDelays=[350,800,1600];
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        const controller=new AbortController();
+        const timeout=window.setTimeout(()=>controller.abort(),15000);
         try {
-          const response = await fetch(url, { cache: "no-store" });
-          if (response.status < 500 || attempt === 1) return response;
+          const response = await fetch(url, { cache: "no-store",signal:controller.signal });
+          if ((response.status < 500 && response.status !== 429) || attempt === 3) return response;
         } catch (error) {
           lastError = error;
+        } finally {
+          window.clearTimeout(timeout);
         }
-        await new Promise((resolve) => window.setTimeout(resolve, 450));
+        if(attempt<3)await new Promise((resolve) => window.setTimeout(resolve,retryDelays[attempt]));
       }
       throw lastError || new Error("network request failed");
     };
@@ -263,6 +270,7 @@ export default function HomePage() {
         fetchWithRetry(`/api/dashboard?${query}`),
         fetchWithRetry(`/api/incidents?${query}`),
       ]);
+      if(requestId!==refreshRequestId.current)return;
 
       if (recordsResult.status === "fulfilled") {
         const response = recordsResult.value;
@@ -293,7 +301,7 @@ export default function HomePage() {
         toast.error("تعذر الاتصال بلوحة المؤشرات. حاول مرة أخرى.");
       }
     } finally {
-      setLoading(false);
+      if(requestId===refreshRequestId.current)setLoading(false);
     }
   }, [query]);
   const loadAux = useCallback(async () => {
