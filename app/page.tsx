@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unused-vars, react-hooks/set-state-in-effect */
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
@@ -232,6 +232,10 @@ export default function HomePage() {
       settings: [],
     });
   const [maintenancePrefill, setMaintenancePrefill] = useState<any>(null);
+  const [passwordOpen,setPasswordOpen]=useState(false);
+  const [passwordDraft,setPasswordDraft]=useState({currentPassword:"",newPassword:"",confirmPassword:""});
+  const [passwordBusy,setPasswordBusy]=useState(false);
+  const reminderStarted=useRef(false);
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("new") === "1") setView("new");
   }, []);
@@ -316,6 +320,23 @@ export default function HomePage() {
     }, 800);
     return () => window.clearTimeout(timer);
   }, [loadAux]);
+  useEffect(()=>{
+    if(!currentUser?.id||reminderStarted.current)return;
+    reminderStarted.current=true;
+    const remind=async()=>{
+      const response=await fetch("/api/incidents?mode=incomplete",{cache:"no-store"}).catch(()=>null);
+      if(!response?.ok)return;
+      const drafts=((await response.json()).incidents||[]) as any[];
+      if(!drafts.length)return;
+      const numbers=drafts.map((item:any)=>String(item.incident_number)).join("، ");
+      toast.warning(`بلاغات غير مكتملة: ${numbers}`,{duration:12000,description:"يرجى استكمال البلاغات أو اعتمادها"});
+      if("Notification" in window&&Notification.permission==="granted")new Notification("بلاغات EMS غير مكتملة",{body:`يرجى استكمال البلاغات: ${numbers}`});
+    };
+    const first=window.setTimeout(remind,3000);
+    const timer=window.setInterval(remind,30*60*1000);
+    return()=>{window.clearTimeout(first);window.clearInterval(timer);reminderStarted.current=false};
+  },[currentUser?.id]);
+  const changeMyPassword=async(e:React.FormEvent)=>{e.preventDefault();if(passwordDraft.newPassword!==passwordDraft.confirmPassword)return toast.error("كلمتا المرور الجديدة غير متطابقتين");setPasswordBusy(true);try{const response=await fetch("/api/users",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({action:"changeMyPassword",currentPassword:passwordDraft.currentPassword,newPassword:passwordDraft.newPassword})});const result=await response.json();if(!response.ok)throw Error(result.error||"تعذر تغيير كلمة المرور");toast.success("تم تغيير كلمة المرور بنجاح");setPasswordOpen(false);setPasswordDraft({currentPassword:"",newPassword:"",confirmPassword:""})}catch(error){toast.error(String(error).replace(/^Error: /,""))}finally{setPasswordBusy(false)}};
   useEffect(() => {
     if (view !== "new" || form.incidentCode) return;
     const controller = new AbortController();
@@ -469,6 +490,7 @@ export default function HomePage() {
           </div>
           <ShieldCheck size={18} />
         </div>
+        <button className="signout-link change-password-link" onClick={()=>setPasswordOpen(true)}><ShieldCheck size={18}/><span>تغيير كلمة المرور</span></button>
         <button
           className="signout-link"
           onClick={async()=>{await fetch("/api/auth/logout",{method:"POST"});window.location.href="/login";}}
@@ -477,6 +499,7 @@ export default function HomePage() {
           <span>تسجيل الخروج</span>
         </button>
       </aside>
+      {passwordOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setPasswordOpen(false)}}><form className="password-change-modal" onSubmit={changeMyPassword} dir="rtl"><div className="modal-head"><div><h2>تغيير كلمة المرور</h2><p>يلزم تأكيد كلمة المرور الحالية قبل حفظ الجديدة</p></div><button type="button" className="icon-btn" onClick={()=>setPasswordOpen(false)}><X/></button></div><label>كلمة المرور الحالية<input required type="password" autoComplete="current-password" value={passwordDraft.currentPassword} onChange={e=>setPasswordDraft({...passwordDraft,currentPassword:e.target.value})}/></label><label>كلمة المرور الجديدة<input required minLength={8} type="password" autoComplete="new-password" value={passwordDraft.newPassword} onChange={e=>setPasswordDraft({...passwordDraft,newPassword:e.target.value})}/></label><label>تأكيد كلمة المرور الجديدة<input required minLength={8} type="password" autoComplete="new-password" value={passwordDraft.confirmPassword} onChange={e=>setPasswordDraft({...passwordDraft,confirmPassword:e.target.value})}/></label><div className="modal-actions"><button type="button" className="ghost" onClick={()=>setPasswordOpen(false)}>إلغاء</button><button className="primary" disabled={passwordBusy}><Save/>{passwordBusy?"جارٍ الحفظ…":"حفظ كلمة المرور"}</button></div></form></div>}
       {mobile && (
         <button
           className="overlay"
@@ -1550,6 +1573,7 @@ function Records({
                 <th>الأولوية</th>
                 <th>المحافظة</th>
                 <th>المحطة</th>
+                <th>مدخل البلاغ</th>
                 <th>الاستجابة</th>
                 <th>التدقيق</th>
                 <th>التفاصيل</th>
@@ -1573,6 +1597,7 @@ function Records({
                   </td>
                   <td>{String(x.pickup_governorate)}</td>
                   <td>{String(x.station)}</td>
+                  <td>{String(x.created_by || "—")}</td>
                   <td>{String(x.response_minutes || 0)} دقيقة</td>
                   <td><span className={`quality-badge ${x.data_quality_status === "review" ? "review" : "ok"}`}>{x.data_quality_status === "review" ? "يحتاج مراجعة" : "سليم"}</span></td>
                   <td>
@@ -1587,7 +1612,7 @@ function Records({
               ))}
               {!rows.length && !loading && (
                 <tr>
-                  <td colSpan={10}>
+                  <td colSpan={11}>
                     <Empty />
                   </td>
                 </tr>
@@ -1605,7 +1630,7 @@ function Records({
             <div className="modal-head">
               <div>
                 <h2>تفاصيل البلاغ {selected.incident_number}</h2>
-                <p>عرض كامل مع تعديل حسب صلاحية الحساب</p>
+                <p>أدخل البلاغ: {selected.created_by || "—"} · {selected.approval_status === "draft" ? "محفوظ كمسودة" : "معتمد"}</p>
               </div>
               <button className="icon-btn" onClick={() => setSelected(null)}>
                 <X />
