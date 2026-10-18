@@ -235,6 +235,7 @@ export default function HomePage() {
   const [passwordOpen,setPasswordOpen]=useState(false);
   const [passwordDraft,setPasswordDraft]=useState({currentPassword:"",newPassword:"",confirmPassword:""});
   const [passwordBusy,setPasswordBusy]=useState(false);
+  const [userMenuOpen,setUserMenuOpen]=useState(false);
   const reminderStarted=useRef(false);
   const refreshRequestId=useRef(0);
   useEffect(() => {
@@ -490,22 +491,18 @@ export default function HomePage() {
             <small>آخر مزامنة: الآن</small>
           </div>
         </div>
-        <div className="side-user">
+        <button type="button" className={`side-user user-menu-trigger ${userMenuOpen?"open":""}`} onClick={()=>setUserMenuOpen(open=>!open)} aria-expanded={userMenuOpen}>
           <div className="avatar">وو</div>
           <div>
             <b>{currentUser?.fullName || "المستخدم"}</b>
             <small>{currentRole === "admin" ? "مدير النظام" : "مستخدم النظام"}</small>
           </div>
-          <ShieldCheck size={18} />
-        </div>
-        <button className="signout-link change-password-link" onClick={()=>setPasswordOpen(true)}><ShieldCheck size={18}/><span>تغيير كلمة المرور</span></button>
-        <button
-          className="signout-link"
-          onClick={async()=>{await fetch("/api/auth/logout",{method:"POST"});window.location.href="/login";}}
-        >
-          <LogOut size={18} />
-          <span>تسجيل الخروج</span>
+          <ChevronLeft className="user-menu-arrow" />
         </button>
+        {userMenuOpen&&<div className="side-user-menu">
+          <button type="button" onClick={()=>{setUserMenuOpen(false);setPasswordOpen(true)}}><ShieldCheck size={18}/><span>تغيير كلمة المرور</span></button>
+          <button type="button" onClick={async()=>{setUserMenuOpen(false);await fetch("/api/auth/logout",{method:"POST"});window.location.href="/login";}}><LogOut size={18}/><span>تسجيل الخروج</span></button>
+        </div>}
       </aside>
       {passwordOpen&&<div className="modal-backdrop" onMouseDown={e=>{if(e.target===e.currentTarget)setPasswordOpen(false)}}><form className="password-change-modal" onSubmit={changeMyPassword} dir="rtl"><div className="modal-head"><div><h2>تغيير كلمة المرور</h2><p>يلزم تأكيد كلمة المرور الحالية قبل حفظ الجديدة</p></div><button type="button" className="icon-btn" onClick={()=>setPasswordOpen(false)}><X/></button></div><label>كلمة المرور الحالية<input required type="password" autoComplete="current-password" value={passwordDraft.currentPassword} onChange={e=>setPasswordDraft({...passwordDraft,currentPassword:e.target.value})}/></label><label>كلمة المرور الجديدة<input required minLength={8} type="password" autoComplete="new-password" value={passwordDraft.newPassword} onChange={e=>setPasswordDraft({...passwordDraft,newPassword:e.target.value})}/></label><label>تأكيد كلمة المرور الجديدة<input required minLength={8} type="password" autoComplete="new-password" value={passwordDraft.confirmPassword} onChange={e=>setPasswordDraft({...passwordDraft,confirmPassword:e.target.value})}/></label><div className="modal-actions"><button type="button" className="ghost" onClick={()=>setPasswordOpen(false)}>إلغاء</button><button className="primary" disabled={passwordBusy}><Save/>{passwordBusy?"جارٍ الحفظ…":"حفظ كلمة المرور"}</button></div></form></div>}
       {mobile && (
@@ -1044,6 +1041,9 @@ function IncidentForm({
       {required && <em>*</em>}
       <input
         type={type}
+        lang={type==="time"||type==="date"?"en-GB":undefined}
+        dir={type==="time"||type==="date"||type==="number"||type==="tel"?"ltr":undefined}
+        step={type==="time"?60:undefined}
         value={form[name]}
         required={required}
         onChange={(e) => {
@@ -1121,7 +1121,7 @@ function IncidentForm({
           {field("callDate", "تاريخ البلاغ", "date", true)}
           <label>
             وقت إدخال البلاغ
-            <input type="time" value={form.entryTime} readOnly />
+            <input type="time" lang="en-GB" dir="ltr" step="60" value={form.entryTime} readOnly />
           </label>
           {field("callTime", "وقت استلام البلاغ", "time", true)}
           {requiresMovement && field("dispatchTime", "وقت تحرك المركبة", "time")}
@@ -1761,6 +1761,9 @@ function Records({
                     <input
                       disabled={!editing}
                       type={type}
+                      lang={type==="time"||type==="date"?"en-GB":undefined}
+                      dir={type==="time"||type==="date"||type==="number"?"ltr":undefined}
+                      step={type==="time"?60:undefined}
                       value={incidentDraft[key]}
                       onChange={(e) =>
                         setIncidentDraft({ ...incidentDraft, [key]: e.target.value })
@@ -1799,7 +1802,7 @@ function AuditLogView() {
   return <div className="page-stack audit-page">
     <section className="panel audit-hero"><PanelTitle icon={History} title="سجل تعديلات البلاغات" subtitle="سجل رقابي لا يمكن لمستخدم الإدخال حذفه أو تعديله"/><button className="ghost" onClick={()=>void load()}><RefreshCw/> تحديث</button></section>
     <section className="panel audit-filters"><label><Search/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ابحث برقم البلاغ أو اسم المستخدم"/></label><select value={action} onChange={e=>setAction(e.target.value)}><option value="all">كل العمليات</option>{Object.entries(labels).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></section>
-    <section className="panel table-panel"><div className="table-wrap"><table><thead><tr><th>التاريخ والوقت</th><th>المستخدم</th><th>العملية</th><th>رقم البلاغ</th><th>التفاصيل</th></tr></thead><tbody>{logs.map(log=><tr key={log.id}><td>{new Date(log.created_at).toLocaleString("ar-PS")}</td><td><b>{log.actor||"النظام"}</b></td><td><span className="audit-action">{labels[log.action]||log.action}</span></td><td>{log.incident_number||log.entity_id||"—"}</td><td>{describe(log.details)}</td></tr>)}{!logs.length&&!loading&&<tr><td colSpan={5}><Empty/></td></tr>}</tbody></table></div>{loading&&<div className="loading-row">جاري تحميل السجل...</div>}</section>
+    <section className="panel table-panel"><div className="table-wrap"><table><thead><tr><th>التاريخ والوقت</th><th>المستخدم</th><th>العملية</th><th>رقم البلاغ</th><th>التفاصيل</th></tr></thead><tbody>{logs.map(log=><tr key={log.id}><td className="latin-datetime">{new Date(log.created_at).toLocaleString("en-GB",{year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:false,timeZone:"Asia/Hebron"})}</td><td><b>{log.actor||"النظام"}</b></td><td><span className="audit-action">{labels[log.action]||log.action}</span></td><td>{log.incident_number||log.entity_id||"—"}</td><td>{describe(log.details)}</td></tr>)}{!logs.length&&!loading&&<tr><td colSpan={5}><Empty/></td></tr>}</tbody></table></div>{loading&&<div className="loading-row">جاري تحميل السجل...</div>}</section>
   </div>;
 }
 
