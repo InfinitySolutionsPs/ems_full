@@ -167,6 +167,12 @@ svg {
   gap: 9px;
   padding: 18px 4px 0;
 }
+.user-menu-trigger{width:100%;border:0;background:transparent;text-align:right;font:inherit;cursor:pointer;border-radius:13px;padding:12px 4px;margin-top:6px;transition:.2s}
+.user-menu-trigger:hover,.user-menu-trigger.open{background:#fff5f6;padding-inline:9px}
+.user-menu-trigger>div:nth-child(2){min-width:0;flex:1}.user-menu-trigger b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px}
+.user-menu-arrow{margin-right:auto!important;width:17px!important;transition:.2s}.user-menu-trigger.open .user-menu-arrow{transform:rotate(-90deg)}
+.side-user-menu{display:grid;gap:6px;margin-top:7px;padding:7px;border:1px solid #f0dadd;border-radius:13px;background:#fffafb;box-shadow:0 9px 25px rgba(89,17,31,.08)}
+.side-user-menu button{height:41px;border:0;border-radius:10px;background:transparent;color:#a9142d;display:flex;align-items:center;gap:9px;padding:0 11px;font:inherit;font-size:12px;font-weight:800;text-align:right}.side-user-menu button:hover{background:#c4172c;color:#fff}.side-user-menu button:last-child{border-top:1px solid #f2dde1;border-radius:0 0 10px 10px}
 .side-user > b {
   font-size: 13px;
 }
@@ -204,6 +210,8 @@ svg {
   background: var(--red);
   color: #fff;
 }
+input[type="date"],input[type="time"],input[type="datetime-local"],.latin-datetime{direction:ltr;text-align:left;font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1;unicode-bidi:isolate}
+input[type="time"],input[type="datetime-local"]{font-family:Arial,"Segoe UI",sans-serif}
 .main {
   width: calc(100% - 265px);
   margin-right: 265px;
