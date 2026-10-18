@@ -3515,9 +3515,41 @@ function ReportsV2({
   exportCsv: () => void;
   settingsData: any;
 }) {
+  const [periodType,setPeriodType]=useState("monthly");
+  const applyReportPeriod=(type:string)=>{
+    setPeriodType(type);
+    if(type==="custom")return;
+    const end=new Date();
+    const start=new Date(end);
+    if(type==="daily"){}
+    if(type==="weekly"){const day=(start.getDay()+6)%7;start.setDate(start.getDate()-day)}
+    if(type==="monthly")start.setDate(1);
+    if(type==="quarterly"){start.setMonth(Math.floor(start.getMonth()/3)*3,1)}
+    if(type==="half_yearly")start.setMonth(start.getMonth()<6?0:6,1);
+    if(type==="yearly")start.setMonth(0,1);
+    const iso=(value:Date)=>`${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,"0")}-${String(value.getDate()).padStart(2,"0")}`;
+    setFilters((current:any)=>({...current,from:iso(start),to:iso(end)}));
+  };
   const reportIncidents = incidents.filter(
     (x) => x.approval_status === "approved",
   );
+  const exportStructuredReport=(kind:"periodic"|"field_response")=>{
+    const centers=(settingsData.centers||[]).filter((center:any)=>center.active!==0);
+    const stations=settingsData.stations||[];
+    const rows=centers.map((center:any)=>{
+      const centerStations=stations.filter((station:any)=>Number(station.center_id)===Number(center.id));
+      const names=new Set(centerStations.map((station:any)=>String(station.name)));
+      const ids=new Set(centerStations.map((station:any)=>Number(station.id)));
+      const records=reportIncidents.filter((incident:any)=>names.has(String(incident.station||"")));
+      const shift=(value:string)=>records.filter((incident:any)=>String(incident.shift||"").toUpperCase()===value).length;
+      return {center:center.name,a:shift("A"),b:shift("B"),c:shift("C"),total:records.length,staff:(settingsData.staff||[]).filter((person:any)=>ids.has(Number(person.station_id))&&person.active!==0).length,vehicles:(settingsData.vehicles||[]).filter((vehicle:any)=>ids.has(Number(vehicle.station_id))&&vehicle.active!==0&&vehicle.service_status!=="maintenance").length,male:records.filter((x:any)=>x.gender==="Male").length,female:records.filter((x:any)=>x.gender==="Female").length,children:records.filter((x:any)=>Number(x.age||0)>0&&Number(x.age)<18).length,adults:records.filter((x:any)=>Number(x.age||0)>=18&&Number(x.age)<60).length,elderly:records.filter((x:any)=>Number(x.age||0)>=60).length,martyrs:records.filter((x:any)=>x.category==="Martyr"||Boolean(x.patient_deceased)).length,injuries:records.filter((x:any)=>x.category==="Trauma"||x.category==="Accident").length,medical:records.filter((x:any)=>x.category==="Medical").length,cancelled:records.filter((x:any)=>Boolean(x.cancelled)||String(x.incident_status||"").startsWith("cancelled")).length};
+    });
+    const keys=kind==="periodic"?["center","a","b","c","total","staff","vehicles"]:["center","total","male","female","children","adults","elderly","martyrs","injuries","medical","cancelled"];
+    const labels:Record<string,string>={center:"المركز",a:"الوردية A",b:"الوردية B",c:"الوردية C",total:"إجمالي المستفيدين",staff:"العاملون المسجلون",vehicles:"المركبات العاملة",male:"ذكور",female:"إناث",children:"أطفال",adults:"بالغون",elderly:"كبار السن",martyrs:"شهداء/وفاة",injuries:"إصابات وحوادث",medical:"حالات مرضية",cancelled:"بلاغات ملغاة"};
+    const totals:any={center:"الإجمالي"};keys.slice(1).forEach(key=>totals[key]=rows.reduce((sum:number,row:any)=>sum+Number(row[key]||0),0));
+    const csv=[[`الفترة: ${filters.from} إلى ${filters.to}`],[...keys.map(key=>labels[key])],...rows.map((row:any)=>keys.map(key=>row[key])),keys.map(key=>totals[key])].map((line:any[])=>line.map((value:any)=>`"${String(value??"").replaceAll('"','""')}"`).join(",")).join("\n");
+    const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`${kind}-${filters.from}-${filters.to}.csv`;a.click();URL.revokeObjectURL(a.href);
+  };
   const exportCoordination = async () => {
     const r = await fetch(
       `/api/coordinations?from=${filters.from}&to=${filters.to}`,
@@ -3561,9 +3593,23 @@ function ReportsV2({
     | "fuel"
     | "movement"
     | "coordination"
+    | "periodic"
+    | "field_response"
     | null
   >(null);
   const reports = [
+    {
+      id: "periodic",
+      t: "التقرير الدوري للموارد",
+      d: "المستفيدون حسب المركز والوردية والعاملون والمركبات العاملة",
+      i: Gauge,
+    },
+    {
+      id: "field_response",
+      t: "تقرير الاستجابة الميدانية",
+      d: "تفاصيل الحالات والمستفيدين والتنسيقات ونتائج الاستجابة حسب المركز",
+      i: Siren,
+    },
     {
       id: "summary",
       t: "ملخص الحالات",
@@ -3639,13 +3685,14 @@ function ReportsV2({
             <button
               className="primary"
               onClick={
-                selected === "coordination" ? exportCoordination : selected === "fuel" ? () => document.getElementById("fuel-report-export")?.click() : selected === "movement" ? () => document.getElementById("movement-report-export")?.click() : exportCsv
+                selected === "coordination" ? exportCoordination : selected === "fuel" ? () => document.getElementById("fuel-report-export")?.click() : selected === "movement" ? () => document.getElementById("movement-report-export")?.click() : selected === "periodic" || selected === "field_response" ? ()=>exportStructuredReport(selected) : exportCsv
               }
             >
               <Download /> تصدير Excel
             </button>
           </div>
         </section>
+        <ReportPeriodPicker periodType={periodType} applyPeriod={applyReportPeriod} filters={filters} setFilters={setFilters}/>
         <Filters {...{ filters, setFilters }} />
         <ReportContent
           type={selected}
@@ -3670,6 +3717,7 @@ function ReportsV2({
           </div>
         </div>
       </section>
+      <ReportPeriodPicker periodType={periodType} applyPeriod={applyReportPeriod} filters={filters} setFilters={setFilters}/>
       <Filters {...{ filters, setFilters }} />
       <section className="report-cards interactive">
         {reports.map((r) => (
@@ -3693,6 +3741,15 @@ function ReportsV2({
       </section>
     </div>
   );
+}
+
+function ReportPeriodPicker({periodType,applyPeriod,filters,setFilters}:{periodType:string;applyPeriod:(type:string)=>void;filters:any;setFilters:any}){
+  const periods=[["daily","يومي"],["weekly","أسبوعي"],["monthly","شهري"],["quarterly","ربعي"],["half_yearly","نصف سنوي"],["yearly","سنوي"],["custom","فترة مخصصة"]];
+  return <section className="panel report-period-picker">
+    <div className="report-period-heading"><span><Clock3/></span><div><b>دورية التقرير</b><small>اختر الفترة وسيتم تحديث التقرير مباشرة</small></div></div>
+    <div className="report-period-buttons">{periods.map(([value,label])=><button type="button" key={value} className={periodType===value?"active":""} onClick={()=>applyPeriod(value)}>{label}</button>)}</div>
+    {periodType==="custom"&&<div className="report-custom-range"><label>من تاريخ<input type="date" value={filters.from} onChange={e=>setFilters((current:any)=>({...current,from:e.target.value}))}/></label><label>إلى تاريخ<input type="date" min={filters.from} value={filters.to} onChange={e=>setFilters((current:any)=>({...current,to:e.target.value}))}/></label></div>}
+  </section>;
 }
 
 function ReportContent({
@@ -3721,6 +3778,31 @@ function ReportContent({
       .then((v) => v && setCoordination(v))
       .catch(() => {});
   }, [filters.from, filters.to]);
+  if(type==="periodic"||type==="field_response"){
+    const centers=(settingsData.centers||[]).filter((center:any)=>center.active!==0);
+    const stations=settingsData.stations||[];
+    const vehicles=settingsData.vehicles||[];
+    const staff=settingsData.staff||[];
+    const centerRows=centers.map((center:any)=>{
+      const centerStations=stations.filter((station:any)=>Number(station.center_id)===Number(center.id));
+      const stationNames=new Set(centerStations.map((station:any)=>String(station.name)));
+      const stationIds=new Set(centerStations.map((station:any)=>Number(station.id)));
+      const rows=incidents.filter((incident:any)=>stationNames.has(String(incident.station||"")));
+      const shift=(name:string)=>rows.filter((incident:any)=>String(incident.shift||"").toUpperCase()===name).length;
+      const male=rows.filter((incident:any)=>incident.gender==="Male").length;
+      const female=rows.filter((incident:any)=>incident.gender==="Female").length;
+      return {id:center.id,name:center.name,rows,total:rows.length,a:shift("A"),b:shift("B"),c:shift("C"),staff:staff.filter((person:any)=>stationIds.has(Number(person.station_id))&&person.active!==0).length,vehicles:vehicles.filter((vehicle:any)=>stationIds.has(Number(vehicle.station_id))&&vehicle.active!==0&&vehicle.service_status!=="maintenance").length,male,female,children:rows.filter((incident:any)=>Number(incident.age||0)>0&&Number(incident.age)<18).length,adults:rows.filter((incident:any)=>Number(incident.age||0)>=18&&Number(incident.age)<60).length,elderly:rows.filter((incident:any)=>Number(incident.age||0)>=60).length,martyrs:rows.filter((incident:any)=>incident.category==="Martyr"||Boolean(incident.patient_deceased)).length,injuries:rows.filter((incident:any)=>incident.category==="Trauma"||incident.category==="Accident").length,medical:rows.filter((incident:any)=>incident.category==="Medical").length,cancelled:rows.filter((incident:any)=>Boolean(incident.cancelled)||String(incident.incident_status||"").startsWith("cancelled")).length};
+    });
+    const total=(key:string)=>centerRows.reduce((sum:number,row:any)=>sum+Number(row[key]||0),0);
+    if(type==="periodic")return <section className="panel table-panel report-sheet periodic-report" dir="rtl">
+      <div className="formal-report-head"><HeartPulse/><div><b>جمعية الهلال الأحمر الفلسطيني</b><span>دائرة الإسعاف والطوارئ</span><h2>التقرير الدوري للموارد والتشغيل</h2><p>للفترة من {filters.from} حتى {filters.to}</p></div></div>
+      <div className="table-wrap"><table><thead><tr><th rowSpan={2}>المركز</th><th colSpan={4}>عدد المستفيدين</th><th rowSpan={2}>العاملون المسجلون</th><th rowSpan={2}>المركبات العاملة</th></tr><tr><th>A</th><th>B</th><th>C</th><th>المجموع</th></tr></thead><tbody>{centerRows.map((row:any)=><tr key={row.id}><td><b>{row.name}</b></td><td>{row.a}</td><td>{row.b}</td><td>{row.c}</td><td><b>{row.total}</b></td><td>{row.staff}</td><td>{row.vehicles}</td></tr>)}<tr className="report-total-row"><td>الإجمالي</td><td>{total("a")}</td><td>{total("b")}</td><td>{total("c")}</td><td>{total("total")}</td><td>{total("staff")}</td><td>{total("vehicles")}</td></tr></tbody></table></div>
+    </section>;
+    return <section className="panel table-panel report-sheet field-response-report" dir="rtl">
+      <div className="formal-report-head"><HeartPulse/><div><b>جمعية الهلال الأحمر الفلسطيني</b><span>دائرة الإسعاف والطوارئ</span><h2>تفصيل الاستجابة الميدانية لمراكز الإسعاف</h2><p>من {filters.from} حتى {filters.to}</p></div></div>
+      <div className="table-wrap"><table><thead><tr><th>المركز</th><th>المستفيدون</th><th>ذكور</th><th>إناث</th><th>أطفال</th><th>بالغون</th><th>كبار السن</th><th>شهداء/وفاة</th><th>إصابات وحوادث</th><th>حالات مرضية</th><th>بلاغات ملغاة</th></tr></thead><tbody>{centerRows.map((row:any)=><tr key={row.id}><td><b>{row.name}</b></td><td>{row.total}</td><td>{row.male}</td><td>{row.female}</td><td>{row.children}</td><td>{row.adults}</td><td>{row.elderly}</td><td>{row.martyrs}</td><td>{row.injuries}</td><td>{row.medical}</td><td>{row.cancelled}</td></tr>)}<tr className="report-total-row"><td>المجموع الكلي</td>{["total","male","female","children","adults","elderly","martyrs","injuries","medical","cancelled"].map(key=><td key={key}>{total(key)}</td>)}</tr></tbody></table></div>
+    </section>;
+  }
   if (type === "fuel") return <FuelReport from={filters.from} to={filters.to}/>;
   if (type === "movement") return <MovementReport from={filters.from} to={filters.to}/>;
   if (type === "interventions") {
