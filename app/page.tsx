@@ -182,6 +182,11 @@ const emptyForm: Record<string, string> = {
   emtAssist: "",
   interventions: "",
   chiefComplaint: "",
+  chiefComplaintOther: "",
+  additionalBeneficiaries: "[]",
+  emergencyEventType: "",
+  emergencyEventNotes: "",
+  previousIncidentCode: "",
   cancelled: "", patientDeceased: "", conflictRelated: "",
   oxygen: "", bvm: "", airway: "", cpr: "", aed: "", drugs: "",
   woundCare: "", tourniquet: "", immobilization: "", cervicalCollar: "",
@@ -226,6 +231,7 @@ export default function HomePage() {
       staff: [],
       settings: [],
     });
+  const [maintenancePrefill, setMaintenancePrefill] = useState<any>(null);
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("new") === "1") setView("new");
   }, []);
@@ -351,9 +357,21 @@ export default function HomePage() {
       toast.error(result.error || "تعذر حفظ البلاغ");
       return;
     }
-    toast.success(submissionAction === "approve" ? `تم اعتماد البلاغ ${form.incidentNumber}` : `تم حفظ البلاغ ${form.incidentNumber} كمسودة`);
-    setForm({ ...emptyForm, callDate: today });
-    setView("dashboard");
+    const createdCount = Number(result.createdCount || 1);
+    toast.success(submissionAction === "approve" ? `تم اعتماد ${createdCount > 1 ? `${createdCount} بلاغات مترابطة` : `البلاغ ${form.incidentNumber}`}` : `تم حفظ البلاغ ${form.incidentNumber} كمسودة`);
+    if (submissionAction === "approve" && form.emergencyEventType === "new_incident") {
+      setForm({ ...emptyForm, callDate: today, center:form.center, station:form.station, vehicle:form.vehicle, kmStart:form.kmEnd, shift:form.shift, crew:form.crew, emtDriver:form.emtDriver, emtLead:form.emtLead, emtAssist:form.emtAssist, entryTime:currentSystemTime(), previousIncidentCode:form.incidentCode });
+      setView("new");
+      toast.info("تم فتح بلاغ متابعة جديد مع بيانات المركبة والطاقم");
+    } else if (submissionAction === "approve" && form.emergencyEventType === "maintenance") {
+      const vehicle = settingsData.vehicles.find((v:any)=>v.plate_number===form.vehicle);
+      setMaintenancePrefill({vehicleId:String(vehicle?.id||""),stationId:String(vehicle?.station_id||""),odometerKm:form.kmEnd||form.kmStart||"",driverName:form.emtDriver||"",failureCause:form.emergencyEventNotes||"",sourceIncidentCode:form.incidentCode});
+      setForm({ ...emptyForm, callDate: today });
+      setView("maintenance");
+    } else {
+      setForm({ ...emptyForm, callDate: today });
+      setView("dashboard");
+    }
     refresh();
     loadAux();
   };
@@ -537,7 +555,7 @@ export default function HomePage() {
           />
         )}{" "}
         {view === "new" && (
-          <IncidentForm form={form} setField={setField} submit={submit} centers={settingsData.centers} stationsData={settingsData.stations} vehicles={settingsData.vehicles} />
+          <IncidentForm form={form} setField={setField} submit={submit} centers={settingsData.centers} stationsData={settingsData.stations} vehicles={settingsData.vehicles} settings={settingsData.settings} />
         )}{" "}
         {view === "records" && (
           <Records
@@ -579,7 +597,7 @@ export default function HomePage() {
         {view === "capacity" && <OperationalCapacity data={settingsData} />}
         {view === "coordination" && <CoordinationView />}
         {view === "fleet" && <FleetView staff={settingsData.staff} stationsData={settingsData.stations} onImported={loadAux} />}
-        {view === "maintenance" && <MaintenanceView onVehiclesChanged={loadAux} />}
+        {view === "maintenance" && <MaintenanceView onVehiclesChanged={loadAux} prefill={maintenancePrefill} />}
       </main>
     </div>
   );
@@ -956,6 +974,7 @@ function IncidentForm({
   centers,
   stationsData,
   vehicles,
+  settings,
 }: {
   form: Record<string, string>;
   setField: (k: string, v: string) => void;
@@ -963,6 +982,7 @@ function IncidentForm({
   centers: any[];
   stationsData: any[];
   vehicles: any[];
+  settings: any[];
 }) {
   const selectedCenterId = Number(form.center || 0);
   const availableStations = (stationsData || []).filter((s:any) => !selectedCenterId || Number(s.center_id) === selectedCenterId);
@@ -975,6 +995,12 @@ function IncidentForm({
   const isCancelled = incidentStatus !== "completed";
   const requiresMovement = incidentStatus !== "cancelled_before_dispatch";
   const requiresDelivery = incidentStatus === "completed";
+  const settingValues = (category:string) => (settings||[]).filter((x:any)=>x.category===category && x.value).map((x:any)=>String(x.value));
+  const hospitalCategory = form.dropoffType === "Hospital (Public)" ? "hospital_public" : form.dropoffType === "Hospital (Private)" ? "hospital_private" : "hospital_field";
+  const hospitalOptions = settingValues(hospitalCategory);
+  const complaintOptions = settingValues("chief_complaint");
+  let additionalBeneficiaries:any[]=[]; try { additionalBeneficiaries=JSON.parse(form.additionalBeneficiaries||"[]"); } catch {}
+  const setAdditional = (rows:any[]) => setField("additionalBeneficiaries",JSON.stringify(rows));
   const field = (
     name: string,
     label: string,
@@ -1137,7 +1163,7 @@ function IncidentForm({
             })}
           {requiresDelivery &&
             form.dropoffType.startsWith("Hospital") &&
-            select("dropoffLocation", "المستشفى المستلم", hospitals, true)}
+            select("dropoffLocation", "المستشفى المستلم", hospitalOptions, true)}
         </div>
       </FormSection>}
 
@@ -1276,9 +1302,31 @@ function IncidentForm({
         </div>
       </FormSection>
 
+      <FormSection icon={UsersRound} title="مستفيدون إضافيون في نفس الحركة">
+        <p className="form-section-note">أضف الحالات التي نُقلت بنفس المركبة. سيحصل كل مستفيد على كود بلاغ مستقل دون إعادة إدخال بيانات الحركة والمحطة والطاقم.</p>
+        <div className="beneficiary-list">
+          {additionalBeneficiaries.map((person:any,index:number)=><div className="beneficiary-card" key={person.localId||index}>
+            <div className="beneficiary-card-head"><b>المستفيد {index+2}</b><button type="button" className="ghost" onClick={()=>setAdditional(additionalBeneficiaries.filter((_:any,i:number)=>i!==index))}><Trash2/> حذف</button></div>
+            <div className="form-grid cols-4">
+              <label>الاسم الكامل<input value={person.beneficiaryName||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,beneficiaryName:e.target.value}:x))}/></label>
+              <label>الجنس <em>*</em><select required value={person.gender||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,gender:e.target.value}:x))}><option value="">اختر...</option><option value="Male">ذكر</option><option value="Female">أنثى</option><option value="Unknown">غير معروف</option></select></label>
+              <label>العمر<input type="number" value={person.age||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,age:e.target.value}:x))}/></label>
+              <label>رقم التواصل<input value={person.contact||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,contact:e.target.value}:x))}/></label>
+              <label>التصنيف <em>*</em><select required value={person.category||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,category:e.target.value,urgency:e.target.value==="Martyr"?"Black":x.urgency}:x))}><option value="">اختر...</option>{categories.map(x=><option key={x} value={x}>{categoryArabic[x]}</option>)}</select></label>
+              <label>نوع الحالة <em>*</em><input required value={person.caseType||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,caseType:e.target.value}:x))}/></label>
+              <label>درجة الأولوية <em>*</em><select required value={person.urgency||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,urgency:e.target.value}:x))}><option value="">اختر...</option>{["Red","Yellow","Green","Black","N/A"].map(x=><option key={x} value={x}>{urgencyArabic[x]}</option>)}</select></label>
+              <label>الشكوى الرئيسية<select value={person.chiefComplaint||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,chiefComplaint:e.target.value}:x))}><option value="">اختر...</option>{complaintOptions.map(x=><option key={x}>{x}</option>)}<option value="__other">أخرى</option></select></label>
+              {person.chiefComplaint==="__other"&&<label>اكتب الشكوى<input value={person.chiefComplaintOther||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,chiefComplaintOther:e.target.value}:x))}/></label>}
+            </div>
+          </div>)}
+        </div>
+        <button type="button" className="ghost add-beneficiary" onClick={()=>setAdditional([...additionalBeneficiaries,{localId:crypto.randomUUID(),beneficiaryName:"",gender:"",age:"",contact:"",category:"",caseType:"",urgency:"",chiefComplaint:"",chiefComplaintOther:""}])}><PlusCircle/> إضافة مستفيد آخر</button>
+      </FormSection>
+
       {!isCancelled && <FormSection icon={Activity} title="التدخلات والملاحظات">
         <div className="form-grid cols-3">
-          {field("chiefComplaint", "الشكوى الرئيسية")}
+          <label>الشكوى الرئيسية<select value={form.chiefComplaint} onChange={e=>{setField("chiefComplaint",e.target.value);if(e.target.value!=="__other")setField("chiefComplaintOther","")}}><option value="">اختر...</option>{complaintOptions.map(x=><option key={x}>{x}</option>)}<option value="__other">أخرى</option></select></label>
+          {form.chiefComplaint==="__other"&&field("chiefComplaintOther","اكتب الشكوى الرئيسية")}
           <label>
             التدخلات الطبية
             <textarea
@@ -1342,6 +1390,13 @@ function IncidentForm({
           </label>
         </FormSection>
       )}
+
+      {requiresMovement && <FormSection icon={AlertTriangle} title="حدث طارئ بعد انتهاء الحركة">
+        <div className="form-grid cols-3">
+          {select("emergencyEventType","ما حدث بعد البلاغ",["","new_incident","maintenance"],false,{"":"عودة طبيعية للمحطة",new_incident:"الانتقال مباشرة إلى بلاغ جديد",maintenance:"التوجه إلى الصيانة"})}
+          {form.emergencyEventType&&field("emergencyEventNotes",form.emergencyEventType==="maintenance"?"وصف العطل الأولي":"ملاحظات التحويل")}
+        </div>
+      </FormSection>}
 
       <div className="form-actions">
         <button type="button" className="ghost" onClick={() => location.reload()}>
@@ -2995,7 +3050,7 @@ function CoordinationView() {
 function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
   const [tab, setTab] = useState("station"),
     [draft, setDraft] = useState<Record<string, string>>({}),
-    [editingId, setEditingId] = useState<number | null>(null);
+    [editingId, setEditingId] = useState<number | string | null>(null);
   const [staffFilters, setStaffFilters] = useState({search:"",station:"all",category:"all",level:"all"});
   const [cleaningStaff, setCleaningStaff] = useState(false);
   const cleanDuplicateStaff = async () => {
@@ -3076,6 +3131,22 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
       ],
       rows: data.staff,
     },
+    hospital_public: {
+      title: "المستشفيات الحكومية", icon: Building2, simpleSetting: true,
+      fields: [["value", "اسم المستشفى"]], rows: (data.settings||[]).filter((x:any)=>x.category==="hospital_public"),
+    },
+    hospital_private: {
+      title: "المستشفيات الخاصة", icon: Building2, simpleSetting: true,
+      fields: [["value", "اسم المستشفى"]], rows: (data.settings||[]).filter((x:any)=>x.category==="hospital_private"),
+    },
+    hospital_field: {
+      title: "المستشفيات الميدانية", icon: Ambulance, simpleSetting: true,
+      fields: [["value", "اسم المستشفى"]], rows: (data.settings||[]).filter((x:any)=>x.category==="hospital_field"),
+    },
+    chief_complaint: {
+      title: "الشكاوى الرئيسية", icon: ClipboardList, simpleSetting: true,
+      fields: [["value", "اسم الشكوى"]], rows: (data.settings||[]).filter((x:any)=>x.category==="chief_complaint"),
+    },
   };
   const c = configs[tab];
   const staffRows = (data.staff || []).filter((r:any) => { let d:any={}; try { d=JSON.parse(r.detail||"{}"); } catch {} return (!staffFilters.search || `${r.full_name} ${r.center_name||""} ${r.job_title||""}`.toLowerCase().includes(staffFilters.search.toLowerCase())) && (staffFilters.station==="all" || String(r.center_id)===staffFilters.station) && (staffFilters.category==="all" || (d.category||r.cadre_type)===staffFilters.category) && (staffFilters.level==="all" || (d.emtLevel||r.job_title)===staffFilters.level); });
@@ -3088,11 +3159,12 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
   };
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
+    const simpleSetting = Boolean(c.simpleSetting);
     const payload = tab === "staff" ? { ...draft, detail: JSON.stringify({station:(data.centers||[]).find((c:any)=>String(c.id)===String(draft.centerId))?.name||"",startYear:draft.startYear||"",gender:draft.gender||"",birthYear:draft.birthYear||"",category:draft.category||draft.cadreType||"",emtLevel:draft.emtLevel||draft.jobTitle||"",medicalQualification:draft.medicalQualification||"",ambulanceLicence:draft.ambulanceLicence||""}) } : draft;
     const r = await fetch("/api/settings", {
-      method: editingId ? "PATCH" : "POST",
+      method: simpleSetting ? "POST" : editingId ? "PATCH" : "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ entity: tab, id: editingId, ...payload }),
+      body: JSON.stringify(simpleSetting ? { entity:"setting", key: editingId || `${tab}_${crypto.randomUUID()}`, value:payload.value, label:payload.value, category:tab } : { entity: tab, id: editingId, ...payload }),
     });
     if (!r.ok) {
       toast.error("تعذر حفظ الإعداد");
@@ -3258,7 +3330,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
               <table>
                 <thead>
                   <tr>
-                    {(tab === "staff"
+                    {(c.simpleSetting ? ["الاسم"] : tab === "staff"
                       ? ["الاسم", "المركز", "سنة الالتحاق", "الجنس", "سنة الميلاد", "الفئة", "مستوى المسعف", "المؤهل الطبي", "رخصة الإسعاف"]
                       : tab === "center"
                         ? ["الرمز", "اسم المركز", "المحافظة"]
@@ -3278,14 +3350,14 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                     ).map((x) => (
                       <th key={x}>{x}</th>
                     ))}
-                    <th>الحالة</th>
+                    {!c.simpleSetting && <th>الحالة</th>}
                     <th>إجراء</th>
                   </tr>
                 </thead>
                 <tbody>
                   {(tab === "staff" ? staffRows : (c.rows || [])).map((r: any) => (
-                    <tr key={r.id}>
-                      {(tab === "staff"
+                    <tr key={r.id ?? r.key}>
+                      {(c.simpleSetting ? [r.value] : tab === "staff"
                         ? (()=>{let d:any={};try{d=JSON.parse(r.detail||"{}")}catch{} return [r.full_name,r.center_name||d.station,d.startYear,d.gender==="Male"?"ذكر":d.gender==="Female"?"أنثى":d.gender,d.birthYear,d.category||r.cadre_type,d.emtLevel||r.job_title,d.medicalQualification==="None"?"—":d.medicalQualification,d.ambulanceLicence==="Yes"?"نعم":d.ambulanceLicence==="No"?"لا":"—"]})()
                         : tab === "center"
                           ? [r.code, r.name, r.governorate]
@@ -3307,20 +3379,21 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                           {i === 0 ? <b>{v || "—"}</b> : v || "—"}
                         </td>
                       ))}
-                      <td>
+                      {!c.simpleSetting && <td>
                         <span
                           className={`state ${r.active === 0 ? "" : "active"}`}
                         >
                           {tab === "vehicle" && r.service_status === "maintenance" ? "قيد الصيانة" : r.active === 0 ? "موقوف" : "نشط"}
                         </span>
-                      </td>
+                      </td>}
                       <td>
                         <button
                           className="employee-edit"
                           onClick={() => {
                             setEditingId(r.id);
+                            if (c.simpleSetting) setEditingId(r.key);
                             setDraft(
-                              tab === "staff"
+                              c.simpleSetting ? {value:r.value||""} : tab === "staff"
                               ? {
                                     ...(()=>{let d:any={};try{d=JSON.parse(r.detail||"{}")}catch{} return {centerId:String(r.center_id||""),startYear:d.startYear||"",gender:d.gender||"",birthYear:d.birthYear||"",category:d.category||r.cadre_type||"",emtLevel:d.emtLevel||r.job_title||"",medicalQualification:d.medicalQualification||"",ambulanceLicence:d.ambulanceLicence||""}})(),
                                     fullName: r.full_name || "",
