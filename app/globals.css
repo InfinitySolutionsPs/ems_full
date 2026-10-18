@@ -2424,3 +2424,7 @@ tbody tr:hover {
 .beneficiary-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;color:#9f142b}
 .beneficiary-card-head .ghost{padding:7px 11px;color:#b42318}
 .add-beneficiary{margin-top:14px;border-style:dashed!important;color:#b0162d!important}
+.password-change-modal{width:min(520px,calc(100vw - 28px));background:#fff;border-radius:20px;padding:22px;display:grid;gap:15px;box-shadow:0 24px 70px #17203333}
+.password-change-modal>label{display:grid;gap:7px;font-weight:800;color:#353b45}
+.password-change-modal input{height:48px;border:1px solid #dfe3e8;border-radius:12px;padding:0 13px;font:inherit}
+.change-password-link{margin-top:4px}
