@@ -123,6 +123,17 @@ export async function POST(request: NextRequest) {
       { error: "يرجى استكمال الحقول الإلزامية", fields: missing },
       { status: 400 },
     );
+  let additionalBeneficiaries: Record<string, unknown>[] = [];
+  try {
+    const value = typeof body.additionalBeneficiaries === "string" ? JSON.parse(body.additionalBeneficiaries) : body.additionalBeneficiaries;
+    if (Array.isArray(value)) additionalBeneficiaries = value.filter((row): row is Record<string,unknown> => Boolean(row && typeof row === "object"));
+  } catch {
+    return NextResponse.json({ error: "بيانات المستفيدين الإضافيين غير صالحة" }, { status: 400 });
+  }
+  if (!isDraft) {
+    const invalidBeneficiary = additionalBeneficiaries.find((row) => !clean(row.gender) || !clean(row.urgency) || !clean(row.category) || !clean(row.caseType));
+    if (invalidBeneficiary) return NextResponse.json({ error: "يرجى استكمال الحقول الإلزامية لكل مستفيد إضافي" }, { status: 400 });
+  }
   let kmStart = 0;
   const kmEnd = !requiresMovement || body.kmEnd === "" || body.kmEnd == null ? null : Number(body.kmEnd);
   const responseMinutes = minutesBetweenDates(body.callDate, body.dispatchTime || body.callTime, body.callDate, body.arrivalTime);
@@ -136,37 +147,45 @@ export async function POST(request: NextRequest) {
     kmStart=chosenVehicle?Number(chosenVehicle.mileage_km||0):0;
     if (!isDraft && kmEnd!=null && (!Number.isFinite(kmEnd) || kmEnd<kmStart)) return NextResponse.json({error:"عداد النهاية يجب أن يساوي أو يزيد عن عداد المركبة الحالي"},{status:400});
     const distanceKm=kmEnd==null?0:kmEnd-kmStart;
-    const entries: [string, unknown][] = [
-      ["incident_number",incidentNumber],["incident_code",incidentCode],["incident_status",incidentStatus],["beneficiary_name",body.beneficiaryName],["gender",body.gender||""],["contact",body.contact],["age",body.age?Number(body.age):null],
-      ["urgency",body.urgency||""],["category",body.category||""],["case_type",body.caseType||""],["pickup_type",requiresDelivery?body.pickupType:null],["pickup_location",requiresDelivery?body.pickupLocation:null],["pickup_governorate",requiresDelivery?(body.pickupGovernorate||""):""],
-      ["pickup_municipality",requiresDelivery?body.pickupMunicipality:null],["pickup_neighborhood",requiresDelivery?body.pickupNeighborhood:null],["dropoff_type",requiresDelivery?body.dropoffType:null],["dropoff_location",requiresDelivery?body.dropoffLocation:null],
-      ["shift",body.shift],["station",body.station],["vehicle",requiresMovement?body.vehicle:null],["vehicle_id",chosenVehicle?.id||null],["km_start",requiresMovement?(kmStart||null):null],["km_end",requiresMovement?kmEnd:null],["distance_km",requiresMovement?distanceKm:0],
-      ["call_date",body.callDate||new Date().toISOString().slice(0,10)],["call_time",body.callTime||""],["entry_time",body.entryTime||""],["dispatch_date",requiresMovement&&body.dispatchTime?body.callDate:null],["dispatch_time",requiresMovement?body.dispatchTime:null],["on_scene_date",requiresMovement&&body.arrivalTime?body.callDate:null],["arrival_time",requiresMovement?body.arrivalTime:null],
-      ["hospital_date",requiresDelivery&&body.hospitalTime?body.callDate:null],["hospital_time",requiresDelivery?body.hospitalTime:null],["available_date",requiresMovement&&body.clearTime?body.callDate:null],["clear_time",requiresMovement?body.clearTime:null],["return_time",requiresMovement?body.returnTime:null],["return_location",incidentStatus==="cancelled_after_dispatch"?body.returnLocation:null],["response_minutes",responseMinutes],["service_minutes",serviceMinutes],
-      ["dispatcher_primary",body.dispatcherPrimary],["dispatcher_secondary",body.dispatcherSecondary],["emt_driver",body.emtDriver],["emt_lead",body.emtLead],["emt_assist",body.emtAssist],
-      ["crew",body.crew],["interventions",requiresDelivery?body.interventions:null],["chief_complaint",requiresDelivery?body.chiefComplaint:null],["fuel_liters",Number(body.fuelLiters||0)],["notes",body.notes],
-      ["cancelled",incidentStatus==="completed"?0:1],
-      ...["patientDeceased","conflictRelated","oxygen","bvm","airway","cpr","aed","drugs","woundCare","tourniquet","immobilization","cervicalCollar","glucoseCheck","splinting","delivery"].map((k)=>[k.replace(/[A-Z]/g,m=>`_${m.toLowerCase()}`), (k==="patientDeceased"&&body.category==="Martyr")||(k==="delivery"&&body.category==="Delivery")||body[k]?1:0] as [string,unknown]),
-      ["approval_status",isDraft?"draft":"approved"],["approved_by",isDraft?null:actor],["approved_at",isDraft?null:new Date().toISOString()],["data_quality_status","ok"],["created_by",actor],["created_by_user_id",access.profile?.id||null],
-    ];
-    const stmt = env.DB.prepare(`INSERT INTO incidents (${entries.map(([k])=>k).join(",")}) VALUES (${entries.map(()=>"?").join(",")})`);
-    const values = entries.map(([,v])=>clean(v));
-    const result = await stmt.bind(...values).run();
-    const incidentId = Number(result.meta.last_row_id);
+    const beneficiaries = [{...body}, ...additionalBeneficiaries];
+    const groupCode = beneficiaries.length > 1 ? incidentCode : null;
+    const created: {id:number;code:string;number:string}[] = [];
+    for (let index=0; index<beneficiaries.length; index+=1) {
+      const beneficiary = beneficiaries[index];
+      const code = index===0 ? incidentCode : await nextIncidentCode();
+      const number = index===0 ? incidentNumber : code;
+      const complaint = beneficiary.chiefComplaint === "__other" ? beneficiary.chiefComplaintOther : beneficiary.chiefComplaint;
+      const entries: [string, unknown][] = [
+        ["incident_number",number],["incident_code",code],["incident_group_code",groupCode],["beneficiary_sequence",index+1],["incident_status",incidentStatus],["beneficiary_name",beneficiary.beneficiaryName],["gender",beneficiary.gender||""],["contact",beneficiary.contact],["age",beneficiary.age?Number(beneficiary.age):null],
+        ["urgency",beneficiary.urgency||""],["category",beneficiary.category||""],["case_type",beneficiary.caseType||""],["pickup_type",requiresDelivery?body.pickupType:null],["pickup_location",requiresDelivery?body.pickupLocation:null],["pickup_governorate",requiresDelivery?(body.pickupGovernorate||""):""],
+        ["pickup_municipality",requiresDelivery?body.pickupMunicipality:null],["pickup_neighborhood",requiresDelivery?body.pickupNeighborhood:null],["dropoff_type",requiresDelivery?body.dropoffType:null],["dropoff_location",requiresDelivery?body.dropoffLocation:null],
+        ["shift",body.shift],["station",body.station],["vehicle",requiresMovement?body.vehicle:null],["vehicle_id",chosenVehicle?.id||null],["km_start",requiresMovement?(kmStart||null):null],["km_end",requiresMovement?kmEnd:null],["distance_km",index===0&&requiresMovement?distanceKm:0],
+        ["call_date",body.callDate||new Date().toISOString().slice(0,10)],["call_time",body.callTime||""],["entry_time",body.entryTime||""],["dispatch_date",requiresMovement&&body.dispatchTime?body.callDate:null],["dispatch_time",requiresMovement?body.dispatchTime:null],["on_scene_date",requiresMovement&&body.arrivalTime?body.callDate:null],["arrival_time",requiresMovement?body.arrivalTime:null],
+        ["hospital_date",requiresDelivery&&body.hospitalTime?body.callDate:null],["hospital_time",requiresDelivery?body.hospitalTime:null],["available_date",requiresMovement&&body.clearTime?body.callDate:null],["clear_time",requiresMovement?body.clearTime:null],["return_time",requiresMovement?body.returnTime:null],["return_location",incidentStatus==="cancelled_after_dispatch"?body.returnLocation:null],["response_minutes",responseMinutes],["service_minutes",serviceMinutes],
+        ["dispatcher_primary",body.dispatcherPrimary],["dispatcher_secondary",body.dispatcherSecondary],["emt_driver",body.emtDriver],["emt_lead",body.emtLead],["emt_assist",body.emtAssist],
+        ["crew",body.crew],["interventions",requiresDelivery?(beneficiary.interventions||body.interventions):null],["chief_complaint",requiresDelivery?complaint:null],["fuel_liters",index===0?Number(body.fuelLiters||0):0],["notes",body.notes],
+        ["emergency_event_type",body.emergencyEventType||null],["emergency_event_notes",body.emergencyEventNotes||null],["cancelled",incidentStatus==="completed"?0:1],
+        ...["patientDeceased","conflictRelated","oxygen","bvm","airway","cpr","aed","drugs","woundCare","tourniquet","immobilization","cervicalCollar","glucoseCheck","splinting","delivery"].map((k)=>[k.replace(/[A-Z]/g,m=>`_${m.toLowerCase()}`), (k==="patientDeceased"&&beneficiary.category==="Martyr")||(k==="delivery"&&beneficiary.category==="Delivery")||beneficiary[k]||body[k]?1:0] as [string,unknown]),
+        ["approval_status",isDraft?"draft":"approved"],["approved_by",isDraft?null:actor],["approved_at",isDraft?null:new Date().toISOString()],["data_quality_status","ok"],["created_by",actor],["created_by_user_id",access.profile?.id||null],
+      ];
+      const result = await env.DB.prepare(`INSERT INTO incidents (${entries.map(([k])=>k).join(",")}) VALUES (${entries.map(()=>"?").join(",")})`).bind(...entries.map(([,v])=>clean(v))).run();
+      created.push({id:Number(result.meta.last_row_id),code,number});
+      await env.DB.prepare("INSERT INTO audit_logs (actor, actor_user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, 'incident', ?, ?)")
+        .bind(actor, access.profile?.id||null, isDraft?"draft_create":"approve_create", String(result.meta.last_row_id), JSON.stringify({incidentNumber:number,status:isDraft?"draft":"approved",groupCode,beneficiarySequence:index+1})).run();
+    }
+    const incidentId = created[0].id;
+    if (body.previousIncidentCode) await env.DB.prepare("UPDATE incidents SET followup_incident_code=? WHERE incident_code=?").bind(incidentCode,body.previousIncidentCode).run();
     if (!isDraft && chosenVehicle && kmEnd!=null) await env.DB.prepare("UPDATE vehicles SET mileage_km=? WHERE id=?").bind(kmEnd,chosenVehicle.id).run();
     if (!isDraft && requiresMovement && chosenVehicle && body.dispatchTime) await env.DB.prepare(`INSERT INTO vehicle_movements (vehicle_id,incident_id,driver_name,departed_at,returned_at,km_start,km_end,destination,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT (incident_id) WHERE incident_id IS NOT NULL DO UPDATE SET vehicle_id=EXCLUDED.vehicle_id,driver_name=EXCLUDED.driver_name,departed_at=EXCLUDED.departed_at,returned_at=EXCLUDED.returned_at,km_start=EXCLUDED.km_start,km_end=EXCLUDED.km_end,destination=EXCLUDED.destination,notes=EXCLUDED.notes,created_by=EXCLUDED.created_by`)
       .bind(chosenVehicle.id,incidentId,body.emtDriver||null,`${body.callDate}T${body.dispatchTime}`,body.returnTime?`${body.callDate}T${body.returnTime}`:null,kmStart,kmEnd,incidentStatus==="cancelled_after_dispatch"?body.returnLocation:(body.dropoffLocation||body.pickupLocation||null),incidentStatus==="cancelled_after_dispatch"?"حركة بلاغ ملغي بعد تحرك المركبة":"حركة مرتبطة ببلاغ",actor).run();
-    await env.DB.prepare(
-      "INSERT INTO audit_logs (actor, actor_user_id, action, entity_type, entity_id, details) VALUES (?, ?, ?, 'incident', ?, ?)",
-    )
-      .bind(actor, access.profile?.id||null, isDraft?"draft_create":"approve_create", String(incidentId), JSON.stringify({incidentNumber,status:isDraft?"draft":"approved"}))
-      .run();
     return NextResponse.json(
       {
         ok: true,
-        id: result.meta.last_row_id,
+        id: incidentId,
         incidentCode,
         incidentNumber,
+        incidentCodes: created.map(row=>row.code),
+        createdCount: created.length,
         distanceKm,
         responseMinutes,
         serviceMinutes,
