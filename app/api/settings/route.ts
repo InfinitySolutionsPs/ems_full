@@ -30,6 +30,22 @@ export async function GET(request:NextRequest) {
       "INSERT OR IGNORE INTO stations (code,name,governorate) VALUES (?,?,?)",
     ).bind("RAF", "محطة رفح", "رفح"),
   ]);
+  const referenceDefaults = [
+    ["hospital_public_shifa","مجمع الشفاء الطبي","مجمع الشفاء الطبي","hospital_public"],
+    ["hospital_public_aqsa","مستشفى شهداء الأقصى","مستشفى شهداء الأقصى","hospital_public"],
+    ["hospital_public_nasser","مستشفى ناصر الطبي","مستشفى ناصر الطبي","hospital_public"],
+    ["hospital_private_ahli","مستشفى الأهلي العربي","مستشفى الأهلي العربي","hospital_private"],
+    ["hospital_private_awda","مستشفى العودة","مستشفى العودة","hospital_private"],
+    ["hospital_field_jordan","المستشفى الميداني الأردني","المستشفى الميداني الأردني","hospital_field"],
+    ["hospital_field_emirates","المستشفى الميداني الإماراتي","المستشفى الميداني الإماراتي","hospital_field"],
+    ["complaint_breathing","ضيق في التنفس","ضيق في التنفس","chief_complaint"],
+    ["complaint_chest","ألم في الصدر","ألم في الصدر","chief_complaint"],
+    ["complaint_bleeding","نزيف","نزيف","chief_complaint"],
+    ["complaint_trauma","إصابة / رضوض","إصابة / رضوض","chief_complaint"],
+    ["complaint_unconscious","فقدان الوعي","فقدان الوعي","chief_complaint"],
+    ["complaint_labor","آلام ولادة","آلام ولادة","chief_complaint"],
+  ];
+  await env.DB.batch(referenceDefaults.map(([key,value,label,category])=>env.DB.prepare("INSERT INTO system_settings (key,value,label,category,updated_by) VALUES (?,?,?,?,?) ON CONFLICT(key) DO NOTHING").bind(key,value,label,category,"system")));
   const existing = await env.DB.prepare("SELECT lower(trim(full_name)) name FROM staff").all();
   const known = new Set(existing.results.map((x:any)=>employeeNameKey(x.name)));
   const pending = (staffArchive as any[]).filter(row=>{
