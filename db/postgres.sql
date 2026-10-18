@@ -70,6 +70,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_incidents_incident_code ON incidents(incid
 UPDATE incidents SET incident_status=CASE WHEN cancelled=1 THEN 'cancelled_after_dispatch' ELSE 'completed' END
 WHERE incident_status IS NULL OR trim(incident_status)='';
 CREATE INDEX IF NOT EXISTS idx_incidents_call_date_time ON incidents(call_date DESC, call_time DESC);
+CREATE INDEX IF NOT EXISTS idx_incidents_approved_call_date ON incidents(call_date DESC) WHERE approval_status='approved';
 CREATE INDEX IF NOT EXISTS idx_incidents_governorate_category_date ON incidents(pickup_governorate, category, call_date DESC);
 CREATE INDEX IF NOT EXISTS idx_incidents_station_date ON incidents(station, call_date DESC);
 CREATE INDEX IF NOT EXISTS idx_incidents_group_code ON incidents(incident_group_code) WHERE incident_group_code IS NOT NULL;
