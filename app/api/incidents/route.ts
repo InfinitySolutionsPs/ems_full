@@ -29,6 +29,11 @@ async function nextIncidentCode() {
 export async function GET(request: NextRequest) {
   const access = await getAccess(request);
   const url = new URL(request.url);
+  if (url.searchParams.get("mode") === "incomplete") {
+    if (!access.profile) return NextResponse.json({ error: "يرجى تسجيل الدخول" }, { status: 401 });
+    const result = await env.DB.prepare("SELECT id,incident_number,call_date FROM incidents WHERE approval_status='draft' AND created_by_user_id=? ORDER BY updated_at DESC LIMIT 100").bind(access.profile.id).all();
+    return NextResponse.json({ incidents: result.results }, { headers: { "Cache-Control": "no-store" } });
+  }
   if (url.searchParams.get("mode") === "next-code") {
     if (!hasPermission(access.profile, "incidents.create"))
       return NextResponse.json({ error: "لا توجد صلاحية لإنشاء البلاغات" }, { status: 403 });
@@ -55,8 +60,8 @@ export async function GET(request: NextRequest) {
     args.push(category);
   }
   if (access.profile?.role === "station_user") {
-    sql += " AND station = ?";
-    args.push(access.profile.station);
+    sql += " AND (station = ? OR station IN (SELECT member.name FROM stations member WHERE member.center_id=(SELECT own.center_id FROM stations own WHERE own.name=? LIMIT 1)))";
+    args.push(access.profile.station, access.profile.station);
   }
   sql += " ORDER BY call_date DESC, call_time DESC LIMIT 1000";
   try {
