@@ -2168,16 +2168,17 @@ function Approvals({
 
 function UsersView({ users, reload }: { users: any[]; reload: () => void }) {
   const permissionGroups = [
-    {title:"لوحة المؤشرات والتقارير",icon:BarChart3,items:[["dashboard.view","عرض لوحة المؤشرات"],["reports.view","عرض وتصدير التقارير"]]},
-    {title:"البلاغات والإحصائيات",icon:ClipboardList,items:[["incidents.view","عرض البلاغات"],["incidents.create","إضافة البلاغات وحفظ المسودات"],["incidents.edit","تعديل المسودات والبلاغات غير المعتمدة"],["incidents.edit_approved","تعديل البلاغات المعتمدة"],["incidents.delete","حذف البلاغات"],["approvals.manage","اعتماد الإحصائيات"],["audit.view","عرض سجل التعديلات"]]},
-    {title:"القدرة والتنسيقات",icon:Gauge,items:[["capacity.view","عرض القدرة التشغيلية"],["capacity.manage","إدارة القدرة التشغيلية"],["coordination.view","عرض التنسيقات"],["coordination.manage","إدارة التنسيقات"]]},
-    {title:"الأسطول والصيانة",icon:Ambulance,items:[["fleet.view","عرض المركبات والوقود"],["fleet.manage","إدارة المركبات والوقود"],["maintenance.view","عرض الصيانة"],["maintenance.manage","إدارة الصيانة"]]},
-    {title:"إدارة النظام",icon:Settings,items:[["users.manage","إدارة المستخدمين"],["settings.manage","إدارة الإعدادات"]]},
+    {title:"الرئيسية والتقارير",icon:BarChart3,items:[["dashboard.view","عرض لوحة المؤشرات والقوى العاملة"],["reports.view","عرض التقارير الدورية والمخصصة وتصدير Excel وPDF"]]},
+    {title:"سجل البلاغات",icon:ClipboardList,items:[["incidents.view","عرض سجل بلاغات نطاق العمل"],["incidents.create","تسجيل بلاغ وحفظه كمسودة أو اعتماده وإضافة مستفيدين"],["incidents.edit","تعديل المسودات والبلاغات غير المعتمدة"],["incidents.edit_approved","تعديل البلاغات المعتمدة والمقفلة"],["incidents.delete","حذف البلاغات نهائيًا"]]},
+    {title:"الرقابة والاعتماد",icon:ShieldCheck,items:[["approvals.manage","اعتماد الإحصائيات وإعادتها للتصحيح"],["audit.view","عرض سجل التعديلات وتفاصيل القيم قبل وبعد"]]},
+    {title:"القدرة التشغيلية والتنسيقات",icon:Gauge,items:[["capacity.view","عرض جدول القدرة التشغيلية والشفتات"],["capacity.manage","إضافة وتعديل تكليفات الموظفين والشفتات"],["coordination.view","عرض سجل التنسيقات"],["coordination.manage","إضافة وتعديل عمليات التنسيق"]]},
+    {title:"الأسطول والحركة والصيانة",icon:Ambulance,items:[["fleet.view","عرض المركبات والوقود وسجل الحركة"],["fleet.manage","إدارة المركبات وتسجيل الوقود والحركات والعدادات"],["maintenance.view","عرض طلبات صيانة المركبات"],["maintenance.manage","إضافة ومتابعة وإغلاق طلبات الصيانة"]]},
+    {title:"إدارة النظام والمراجع",icon:Settings,items:[["settings.manage","إدارة المراكز والمحطات والموظفين والمركبات والمستشفيات والشكاوى"],["users.manage","إدارة المستخدمين والأدوار والصلاحيات"]]},
   ];
   const allPermissions=permissionGroups.flatMap(group=>group.items.map(([code])=>code));
   const rolePresets:Record<string,string[]>={
     admin:["*"],
-    central_user:allPermissions.filter(code=>code!=="users.manage"),
+    central_user:allPermissions.filter(code=>!["users.manage","settings.manage","incidents.delete"].includes(code)),
     station_user:["dashboard.view","incidents.view","incidents.create","capacity.view","fleet.view","maintenance.view"],
     viewer:["dashboard.view","incidents.view","reports.view"],
     custom:[],
