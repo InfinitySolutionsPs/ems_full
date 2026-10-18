@@ -1007,6 +1007,7 @@ function IncidentForm({
   vehicles: any[];
   settings: any[];
 }) {
+  const [emergencyEventOpen, setEmergencyEventOpen] = useState(Boolean(form.emergencyEventType));
   const selectedCenterId = Number(form.center || 0);
   const availableStations = (stationsData || []).filter((s:any) => !selectedCenterId || Number(s.center_id) === selectedCenterId);
   const selectedStation = (stationsData || []).find((s:any) => s.name === form.station);
@@ -1415,9 +1416,41 @@ function IncidentForm({
       )}
 
       {requiresMovement && <FormSection icon={AlertTriangle} title="حدث طارئ بعد انتهاء الحركة">
-        <div className="form-grid cols-3">
-          {select("emergencyEventType","ما حدث بعد البلاغ",["","new_incident","maintenance"],false,{"":"عودة طبيعية للمحطة",new_incident:"الانتقال مباشرة إلى بلاغ جديد",maintenance:"التوجه إلى الصيانة"})}
-          {form.emergencyEventType&&field("emergencyEventNotes",form.emergencyEventType==="maintenance"?"وصف العطل الأولي":"ملاحظات التحويل")}
+        <div className="emergency-event-actions">
+          <button
+            type="button"
+            className={`emergency-event-trigger ${emergencyEventOpen || form.emergencyEventType ? "active" : ""}`}
+            onClick={() => setEmergencyEventOpen((open) => !open)}
+            aria-expanded={emergencyEventOpen}
+          >
+            <PlusCircle />
+            {form.emergencyEventType ? "تعديل الحدث الطارئ" : "إضافة حدث طارئ"}
+          </button>
+          {(emergencyEventOpen || form.emergencyEventType) && <div className="emergency-event-panel">
+            <p>اختاري الإجراء الذي انتقلت إليه المركبة بعد هذا البلاغ:</p>
+            <div className="emergency-event-options">
+              <button
+                type="button"
+                className={form.emergencyEventType === "maintenance" ? "selected" : ""}
+                onClick={() => setField("emergencyEventType", "maintenance")}
+              >
+                <Wrench /><b>صيانة</b><span>فتح طلب صيانة للمركبة بعد اعتماد البلاغ</span>
+              </button>
+              <button
+                type="button"
+                className={form.emergencyEventType === "new_incident" ? "selected" : ""}
+                onClick={() => setField("emergencyEventType", "new_incident")}
+              >
+                <Siren /><b>بلاغ جديد</b><span>فتح بلاغ متابعة بنفس المركبة والطاقم</span>
+              </button>
+            </div>
+            {form.emergencyEventType && <div className="emergency-event-details">
+              {field("emergencyEventNotes",form.emergencyEventType==="maintenance"?"وصف العطل الأولي":"ملاحظات البلاغ الجديد")}
+              <button type="button" className="ghost" onClick={() => { setField("emergencyEventType", ""); setField("emergencyEventNotes", ""); setEmergencyEventOpen(false); }}>
+                <X /> إلغاء الحدث الطارئ
+              </button>
+            </div>}
+          </div>}
         </div>
       </FormSection>}
 
