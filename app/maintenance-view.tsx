@@ -10,10 +10,10 @@ type Maintenance = Record<string, string | number | null> & { id: number; vehicl
 const today = new Date().toISOString().slice(0, 10);
 const start = `${new Date().getUTCFullYear()}-01-01`;
 
-export default function MaintenanceView({ onVehiclesChanged }: { onVehiclesChanged: () => void }) {
+export default function MaintenanceView({ onVehiclesChanged, prefill }: { onVehiclesChanged: () => void; prefill?: Partial<{vehicleId:string;stationId:string;odometerKm:string;driverName:string;failureCause:string;sourceIncidentCode:string}> | null }) {
   const [filters, setFilters] = useState({ from: start, to: today, vehicleId: "", stationId: "" });
   const [data, setData] = useState<{ vehicles: Vehicle[]; stations: Station[]; requests: Maintenance[]; canClose: boolean }>({ vehicles: [], stations: [], requests: [], canClose: false });
-  const [draft, setDraft] = useState({ vehicleId: "", stationId: "", requestDate: today, department: "", odometerKm: "", requestedRepair: "", failureCause: "", driverName: "", centerManagerName: "", circleManagerName: "" });
+  const [draft, setDraft] = useState({ vehicleId: "", stationId: "", requestDate: today, department: "", odometerKm: "", requestedRepair: "", failureCause: "", driverName: "", centerManagerName: "", circleManagerName: "", sourceIncidentCode: "" });
   const [file, setFile] = useState<File | null>(null);
   const [selected, setSelected] = useState<Maintenance | null>(null);
   const [closeDraft, setCloseDraft] = useState({ performedWork: "", receivedAt: today, receivedBy: "", maintenanceRecommendation: "", managerRecommendation: "", financeRecommendation: "", administrativeRecommendation: "" });
@@ -31,6 +31,10 @@ export default function MaintenanceView({ onVehiclesChanged }: { onVehiclesChang
     finally { setLoading(false); }
   }, [filters]);
   useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!prefill) return;
+    setDraft((previous) => ({ ...previous, ...prefill }));
+  }, [prefill]);
   const setFilter = (key: keyof typeof filters, value: string) => setFilters((previous) => ({ ...previous, [key]: value }));
   const setField = (key: keyof typeof draft, value: string) => setDraft((previous) => ({ ...previous, [key]: value }));
   const submit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -50,7 +54,7 @@ export default function MaintenanceView({ onVehiclesChanged }: { onVehiclesChang
       const result = await response.json();
       if (!response.ok) throw new Error(result.error);
       toast.success("حُفظ الطلب وأصبحت المركبة قيد الصيانة");
-      setDraft({ vehicleId: "", stationId: "", requestDate: today, department: "", odometerKm: "", requestedRepair: "", failureCause: "", driverName: "", centerManagerName: "", circleManagerName: "" });
+      setDraft({ vehicleId: "", stationId: "", requestDate: today, department: "", odometerKm: "", requestedRepair: "", failureCause: "", driverName: "", centerManagerName: "", circleManagerName: "", sourceIncidentCode: "" });
       setFile(null);
       fileInput.value = "";
       await load(); onVehiclesChanged();
