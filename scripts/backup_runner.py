@@ -71,11 +71,11 @@ def main():
                 for chunk in iter(lambda: stream.read(1024 * 1024), b""):
                     hasher.update(chunk)
             digest = hasher.hexdigest()
-            remote = "onedrive:" + os.getenv("ONEDRIVE_FOLDER", "PRCS-Backups/EMS").strip("/")
+            remote = "onedrive-crypt:"
             cloud_uploaded = False
             cloud_message = "لم يتم إعداد OneDrive بعد"
             remotes = subprocess.run(["rclone", "listremotes", "--config", RCLONE_CONFIG], capture_output=True, text=True)
-            if "onedrive:" in remotes.stdout.splitlines():
+            if "onedrive-crypt:" in remotes.stdout.splitlines():
                 try:
                     run(["rclone", "copyto", str(archive), f"{remote}/{name}", "--config", RCLONE_CONFIG, "--retries", "3", "--low-level-retries", "5"])
                     cloud_uploaded = True
