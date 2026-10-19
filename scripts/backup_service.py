@@ -26,7 +26,8 @@ def read_state():
 def cloud_configured():
     try:
         result = subprocess.run(["rclone", "listremotes", "--config", "/config/rclone/rclone.conf"], capture_output=True, text=True, timeout=5)
-        return "onedrive:" in result.stdout.splitlines()
+        remotes = result.stdout.splitlines()
+        return "onedrive:" in remotes and "onedrive-crypt:" in remotes
     except Exception:
         return False
 
