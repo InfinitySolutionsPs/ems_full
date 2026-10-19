@@ -13,4 +13,13 @@ if [ -n "${ONEDRIVE_TOKEN_JSON:-}" ] && ! rclone listremotes --config /config/rc
   rclone --config /config/rclone/rclone.conf config create "$@" >/dev/null
 fi
 
+# Encrypt archive contents before upload while keeping file names available for retention.
+if [ -n "${BACKUP_ENCRYPTION_PASSWORD:-}" ] && rclone listremotes --config /config/rclone/rclone.conf 2>/dev/null | grep -qx 'onedrive:' && ! rclone listremotes --config /config/rclone/rclone.conf 2>/dev/null | grep -qx 'onedrive-crypt:'; then
+  folder=${ONEDRIVE_FOLDER:-PRCS-Backups/EMS}
+  rclone --config /config/rclone/rclone.conf config create onedrive-crypt crypt \
+    remote "onedrive:${folder#/}" \
+    filename_encryption off directory_name_encryption false \
+    password "$BACKUP_ENCRYPTION_PASSWORD" >/dev/null
+fi
+
 exec python3 /app/backup_service.py
