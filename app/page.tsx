@@ -5,11 +5,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertTriangle,
+  Archive,
   Ambulance,
   BarChart3,
   Bell,
   Building2,
   CheckCircle2,
+  CloudUpload,
   ChevronLeft,
   ClipboardCheck,
   ClipboardList,
@@ -71,6 +73,7 @@ type View =
   | "maintenance"
   | "approvals"
   | "audit"
+  | "backups"
   | "reports"
   | "users"
   | "settings";
@@ -448,6 +451,7 @@ export default function HomePage() {
     { id: "maintenance", label: "صيانة المركبات", icon: Wrench, permission:"maintenance.view" },
     { id: "approvals", label: "اعتماد الإحصائيات", icon: ClipboardCheck, permission:"approvals.manage" },
     { id: "audit", label: "سجل التعديلات", icon: History, permission:"audit.view" },
+    { id: "backups", label: "النسخ الاحتياطي", icon: Archive, permission:"backup.manage" },
     { id: "reports", label: "التقارير", icon: FileBarChart, permission:"reports.view" },
     { id: "settings", label: "الإعدادات", icon: Settings, permission:"settings.manage" },
     { id: "users", label: "المستخدمون", icon: UserCog, permission:"users.manage" },
@@ -540,6 +544,8 @@ export default function HomePage() {
                           ? "تتبع إنشاء البلاغات وتعديلها واعتمادها"
                           : view === "reports"
                             ? "تقارير مستقلة قابلة للطباعة والتصدير"
+                            : view === "backups"
+                              ? "نسخ يومية تلقائية ونسخ فورية مع حفظ آمن خارج الخادم"
                             : view === "users"
                               ? "إدارة الحسابات والأدوار والصلاحيات"
                               : "إدارة القوائم الأساسية للنظام"}
@@ -608,6 +614,7 @@ export default function HomePage() {
           />
         )}{" "}
         {view === "audit" && <AuditLogView />}{" "}
+        {view === "backups" && <BackupsView />}{" "}
         {view === "reports" && (
           <ReportsV2
             dashboard={dashboard}
@@ -1819,6 +1826,42 @@ function AuditLogView() {
   </div>;
 }
 
+function BackupsView() {
+  const [status, setStatus] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const load = useCallback(async () => {
+    try {
+      const response = await fetch("/api/backups", { cache: "no-store" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "تعذر تحميل حالة النسخ الاحتياطي");
+      setStatus(result);
+    } catch (error) { setStatus({ status: "unavailable", error: String(error).replace(/^Error: /, "") }); }
+    finally { setLoading(false); }
+  }, []);
+  useEffect(() => { void load(); const timer = window.setInterval(() => void load(), 15000); return () => window.clearInterval(timer); }, [load]);
+  const createBackup = async () => {
+    setRunning(true);
+    try {
+      const response = await fetch("/api/backups", { method: "POST" });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "تعذر بدء النسخ الاحتياطي");
+      toast.success("بدأ إنشاء النسخة الاحتياطية. ستظهر حالتها تلقائيًا هنا.");
+      await load();
+    } catch (error) { toast.error(String(error).replace(/^Error: /, "")); }
+    finally { setRunning(false); }
+  };
+  const dateTime = (value?: string) => value ? new Date(value).toLocaleString("en-GB", { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false, timeZone: "Asia/Hebron" }) : "—";
+  const statusLabel: Record<string, string> = { never: "لم تُنشأ نسخة بعد", running: "جارٍ إنشاء النسخة", success: "تم النسخ ورفعه إلى OneDrive", local_only: "تم الحفظ محليًا — ربط OneDrive غير مكتمل", failed: "فشل إنشاء النسخة", unavailable: "خدمة النسخ غير مهيأة بعد" };
+  const statusClass = status?.status === "running" ? "running" : status?.status === "success" ? "success" : status?.status === "failed" ? "failed" : "pending";
+  return <div className="page-stack backup-page">
+    <section className="panel backup-hero"><div className="backup-icon"><Archive/></div><div><h2>النسخ الاحتياطي لنظام EMS</h2><p>نسخة يومية تلقائية الساعة 02:00 بتوقيت فلسطين، مع إمكانية الإنشاء عند الطلب.</p></div><button className="primary" onClick={()=>void createBackup()} disabled={running||status?.status==="running"}><Archive/>{running||status?.status==="running"?"جارٍ التنفيذ…":"إنشاء نسخة الآن"}</button></section>
+    <section className="backup-cards"><article className="panel"><small>حالة آخر نسخة</small><strong className={`backup-status ${statusClass}`}><i/>{loading?"جارٍ الفحص…":statusLabel[status?.status]||"الحالة غير معروفة"}</strong></article><article className="panel"><small>آخر تشغيل</small><strong className="latin-datetime">{dateTime(status?.finished_at||status?.started_at)}</strong></article><article className="panel"><small>وجهة التخزين</small><strong>{status?.cloud_uploaded?"OneDrive for Business + نسخة محلية":status?.cloud_configured?"OneDrive مهيأ — بانتظار النسخة القادمة":"OneDrive يحتاج إعدادًا لمرة واحدة"}</strong></article></section>
+    <section className="panel backup-details"><div><h3>محتوى النسخة</h3><p>قاعدة بيانات PostgreSQL ومجلد المرفقات. تُحفظ نسخة محلية على volume مستقل، وتُرفع إلى OneDrive عند إعداد الربط.</p><div className="backup-retention"><span>النسخ المحلية: آخر 7 أيام</span><span>OneDrive: آخر 30 يومًا</span><span>تُنفذ تلقائيًا يوميًا دون تدخل</span></div>{status?.filename&&<small className="backup-file latin-datetime">آخر ملف: {status.filename} · الحجم: {Math.max(1,Math.round(Number(status.size_bytes||0)/1024/1024))} MB</small>}{status?.cloud_message&&<small className="backup-cloud-note">{status.cloud_message}</small>}{status?.error&&<div className="backup-error">{status.error}</div>}</div><div className="backup-actions"><button className="ghost" onClick={()=>void load()}><RefreshCw/> تحديث الحالة</button><a className={`ghost ${status?.filename?"":"disabled"}`} href={status?.filename?"/api/backups?download=latest":undefined} aria-disabled={!status?.filename}><Download/> تنزيل آخر نسخة</a></div></section>
+    {!status?.cloud_configured&&<section className="backup-setup-note"><CloudUpload/><div><b>يلزم إعداد OneDrive مرة واحدة على الخادم</b><p>أضيفي متغير ONEDRIVE_TOKEN_JSON في إعدادات Coolify مع BACKUP_API_TOKEN. بعد ذلك يتم الرفع يوميًا تلقائيًا دون طلب تسجيل دخول متكرر.</p></div></section>}
+  </div>;
+}
+
 function Reports({
   dashboard,
   incidents,
@@ -2173,12 +2216,12 @@ function UsersView({ users, reload }: { users: any[]; reload: () => void }) {
     {title:"الرقابة والاعتماد",icon:ShieldCheck,items:[["approvals.manage","اعتماد الإحصائيات وإعادتها للتصحيح"],["audit.view","عرض سجل التعديلات وتفاصيل القيم قبل وبعد"]]},
     {title:"القدرة التشغيلية والتنسيقات",icon:Gauge,items:[["capacity.view","عرض جدول القدرة التشغيلية والشفتات"],["capacity.manage","إضافة وتعديل تكليفات الموظفين والشفتات"],["coordination.view","عرض سجل التنسيقات"],["coordination.manage","إضافة وتعديل عمليات التنسيق"]]},
     {title:"الأسطول والحركة والصيانة",icon:Ambulance,items:[["fleet.view","عرض المركبات والوقود وسجل الحركة"],["fleet.manage","إدارة المركبات وتسجيل الوقود والحركات والعدادات"],["maintenance.view","عرض طلبات صيانة المركبات"],["maintenance.manage","إضافة ومتابعة وإغلاق طلبات الصيانة"]]},
-    {title:"إدارة النظام والمراجع",icon:Settings,items:[["settings.manage","إدارة المراكز والمحطات والموظفين والمركبات والمستشفيات والشكاوى"],["users.manage","إدارة المستخدمين والأدوار والصلاحيات"]]},
+    {title:"إدارة النظام والمراجع",icon:Settings,items:[["settings.manage","إدارة المراكز والمحطات والموظفين والمركبات والمستشفيات والشكاوى"],["users.manage","إدارة المستخدمين والأدوار والصلاحيات"],["backup.manage","إنشاء وإدارة النسخ الاحتياطية وتنزيلها"]]},
   ];
   const allPermissions=permissionGroups.flatMap(group=>group.items.map(([code])=>code));
   const rolePresets:Record<string,string[]>={
     admin:["*"],
-    central_user:allPermissions.filter(code=>!["users.manage","settings.manage","incidents.delete"].includes(code)),
+    central_user:allPermissions.filter(code=>!["users.manage","settings.manage","incidents.delete","backup.manage"].includes(code)),
     station_user:["dashboard.view","incidents.view","incidents.create","capacity.view","fleet.view","maintenance.view"],
     viewer:["dashboard.view","incidents.view","reports.view"],
     custom:[],

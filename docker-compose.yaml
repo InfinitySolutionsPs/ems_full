@@ -26,6 +26,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-ems}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-ems}
       UPLOAD_DIR: /app/data/uploads
       PORT: 3000
+      BACKUP_SERVICE_URL: http://backup:8765
+      BACKUP_API_TOKEN: ${BACKUP_API_TOKEN:-}
     volumes:
       - ems_uploads:/app/data
     ports:
@@ -37,6 +39,34 @@ services:
       retries: 10
       start_period: 30s
 
+  backup:
+    build:
+      context: .
+      dockerfile: Dockerfile.backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      TZ: Asia/Hebron
+      POSTGRES_DB: ${POSTGRES_DB:-ems}
+      POSTGRES_USER: ${POSTGRES_USER:-ems}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in Coolify}
+      PGHOST: postgres
+      BACKUP_DIR: /backups
+      UPLOADS_DIR: /data/uploads
+      BACKUP_API_TOKEN: ${BACKUP_API_TOKEN:-}
+      ONEDRIVE_TOKEN_JSON: ${ONEDRIVE_TOKEN_JSON:-}
+      ONEDRIVE_CLIENT_ID: ${ONEDRIVE_CLIENT_ID:-}
+      ONEDRIVE_CLIENT_SECRET: ${ONEDRIVE_CLIENT_SECRET:-}
+      ONEDRIVE_FOLDER: ${ONEDRIVE_FOLDER:-PRCS-Backups/EMS}
+    volumes:
+      - ems_uploads:/data:ro
+      - ems_backups:/backups
+      - ems_rclone_config:/config/rclone
+
 volumes:
   ems_postgres_data:
   ems_uploads:
+  ems_backups:
+  ems_rclone_config:

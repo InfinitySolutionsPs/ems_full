@@ -1,0 +1,9 @@
+FROM postgres:16-alpine
+RUN apk add --no-cache python3 rclone tzdata tar coreutils
+ENV TZ=Asia/Hebron BACKUP_DIR=/backups UPLOADS_DIR=/data/uploads
+WORKDIR /app
+COPY scripts/backup_service.py scripts/backup_runner.py /app/
+COPY scripts/backup-entrypoint.sh /app/entrypoint.sh
+RUN chmod 755 /app/entrypoint.sh
+EXPOSE 8765
+ENTRYPOINT ["/app/entrypoint.sh"]
