@@ -45,7 +45,7 @@ export async function GET(request:NextRequest) {
     ["complaint_unconscious","فقدان الوعي","فقدان الوعي","chief_complaint"],
     ["complaint_labor","آلام ولادة","آلام ولادة","chief_complaint"],
   ];
-  await env.DB.batch(referenceDefaults.map(([key,value,label,category])=>env.DB.prepare("INSERT INTO system_settings (key,value,label,category,updated_by) VALUES (?,?,?,?,?) ON CONFLICT(key) DO NOTHING").bind(key,value,label,category,"system")));
+  await env.DB.batch(referenceDefaults.map(([key,value,label,category])=>env.DB.prepare("INSERT INTO system_settings (key,value,label,category,updated_by) SELECT ?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM system_settings WHERE key=?) ON CONFLICT(key) DO NOTHING").bind(key,value,label,category,"system",`deleted__${key}`)));
   const existing = await env.DB.prepare("SELECT lower(trim(full_name)) name FROM staff").all();
   const known = new Set(existing.results.map((x:any)=>employeeNameKey(x.name)));
   const pending = (staffArchive as any[]).filter(row=>{
@@ -74,7 +74,7 @@ export async function GET(request:NextRequest) {
   const [centers, stations, vehicles, staff, settings] = await env.DB.batch([
     env.DB.prepare("SELECT * FROM centers ORDER BY name"),
     env.DB.prepare("SELECT s.*,c.name center_name FROM stations s LEFT JOIN centers c ON c.id=s.center_id ORDER BY s.name"),
-    env.DB.prepare("SELECT v.*,s.center_id,c.name center_name FROM vehicles v LEFT JOIN stations s ON s.id=v.station_id LEFT JOIN centers c ON c.id=s.center_id ORDER BY v.plate_number"),
+    env.DB.prepare("SELECT v.*,c.name center_name FROM vehicles v LEFT JOIN centers c ON c.id=v.center_id ORDER BY v.plate_number"),
     env.DB.prepare("SELECT s.*,c.name center_name FROM staff s LEFT JOIN centers c ON c.id=s.center_id ORDER BY s.full_name"),
     env.DB.prepare("SELECT * FROM system_settings ORDER BY category,key"),
   ]);
@@ -102,15 +102,16 @@ export async function PATCH(request: NextRequest) {
     );
   if (b.entity === "staff")
     await env.DB.prepare(
-      "UPDATE staff SET full_name=?,cadre_type=?,job_title=?,detail=?,active=?,center_id=? WHERE id=?",
+      "UPDATE staff SET full_name=?,cadre_type=?,job_title=?,detail=?,employment_status=?,active=?,center_id=? WHERE id=?",
     )
       .bind(
         b.fullName,
         b.cadreType,
         b.jobTitle,
         b.detail || null,
-        b.active === false ? 0 : 1,
-        b.centerId ? Number(b.centerId) : null,
+        b.employmentStatus || "on_duty",
+        ["on_duty"].includes(b.employmentStatus || "on_duty") ? 1 : 0,
+        b.centerId || b.stationId ? Number(b.centerId || b.stationId) : null,
         b.id,
       )
       .run();
@@ -131,7 +132,7 @@ export async function PATCH(request: NextRequest) {
     if (openMaintenance && b.serviceStatus !== "maintenance")
       return NextResponse.json({ error: "هذه المركبة قيد الصيانة؛ لا تُعاد للخدمة إلا بإغلاق طلب الصيانة" }, { status: 409 });
     await env.DB.prepare(
-      "UPDATE vehicles SET plate_number=?,manufacturer=?,model=?,ambulance_type=?,fuel_type=?,work_location=?,service_status=?,out_of_service_reason=?,active=?,station_id=?,mileage_km=? WHERE id=?",
+      "UPDATE vehicles SET plate_number=?,manufacturer=?,model=?,ambulance_type=?,fuel_type=?,work_location=?,service_status=?,out_of_service_reason=?,active=?,center_id=?,station_id=NULL,mileage_km=? WHERE id=?",
     )
       .bind(
         b.plateNumber,
@@ -143,7 +144,7 @@ export async function PATCH(request: NextRequest) {
         openMaintenance ? "maintenance" : b.serviceStatus === "out_of_service" ? "out_of_service" : "active",
         openMaintenance ? "طلب صيانة مفتوح" : b.outOfServiceReason || null,
         openMaintenance || b.serviceStatus === "out_of_service" ? 0 : 1,
-        b.stationId ? Number(b.stationId) : null,
+        b.centerId || b.stationId ? Number(b.centerId || b.stationId) : null,
         Math.max(requestedMileage, Number((await env.DB.prepare("SELECT mileage_km FROM vehicles WHERE id=?").bind(b.id).first<any>())?.mileage_km || 0)),
         b.id,
       )
@@ -213,7 +214,7 @@ export async function POST(request: NextRequest) {
     if (!Number.isFinite(requestedMileage) || requestedMileage < 0)
       return NextResponse.json({ error: "قراءة عداد المركبة غير صالحة" }, { status: 400 });
     await env.DB.prepare(
-      "INSERT INTO vehicles (plate_number,manufacturer,model,ambulance_type,fuel_type,work_location,service_status,out_of_service_reason,active,station_id,mileage_km) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+      "INSERT INTO vehicles (plate_number,manufacturer,model,ambulance_type,fuel_type,work_location,service_status,out_of_service_reason,active,center_id,mileage_km) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
     )
       .bind(
         b.plateNumber,
@@ -225,16 +226,16 @@ export async function POST(request: NextRequest) {
         b.serviceStatus === "out_of_service" ? "out_of_service" : "active",
         b.outOfServiceReason || null,
         b.serviceStatus === "out_of_service" ? 0 : 1,
-        b.stationId ? Number(b.stationId) : null,
+        b.centerId || b.stationId ? Number(b.centerId || b.stationId) : null,
         requestedMileage,
       )
       .run();
   }
   else if (b.entity === "staff")
     await env.DB.prepare(
-      "INSERT INTO staff (full_name,cadre_type,job_title,detail,center_id) VALUES (?,?,?,?,?)",
+      "INSERT INTO staff (full_name,cadre_type,job_title,detail,center_id,employment_status,active) VALUES (?,?,?,?,?,?,?)",
     )
-      .bind(b.fullName, b.cadreType, b.jobTitle, b.detail || null, b.centerId ? Number(b.centerId) : null)
+      .bind(b.fullName, b.cadreType, b.jobTitle, b.detail || null, b.centerId ? Number(b.centerId) : null, b.employmentStatus || "on_duty", (b.employmentStatus || "on_duty") === "on_duty" ? 1 : 0)
       .run();
   else if (b.entity === "setting")
     await env.DB.prepare(
@@ -248,4 +249,48 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   return NextResponse.json({ ok: true }, { status: 201 });
+}
+
+export async function DELETE(request: NextRequest) {
+  const access = await getAccess(request);
+  if (!hasPermission(access.profile, "settings.manage"))
+    return NextResponse.json({ error: "الحذف متاح لمدير النظام فقط" }, { status: 403 });
+
+  const { entity, id, key } = (await request.json()) as Record<string, any>;
+  try {
+    if (entity === "setting") {
+      if (!key) return NextResponse.json({ error: "الإعداد غير محدد" }, { status: 400 });
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM system_settings WHERE key=?").bind(key),
+        env.DB.prepare("INSERT INTO system_settings (key,value,label,category,updated_by) VALUES (?,?,?,?,?) ON CONFLICT(key) DO NOTHING").bind(`deleted__${key}`, "1", "عنصر محذوف", "_deleted", access.email),
+      ]);
+    } else if (entity === "center") {
+      if (!id) return NextResponse.json({ error: "المركز غير محدد" }, { status: 400 });
+      const used = await env.DB.prepare("SELECT 1 FROM stations WHERE center_id=? UNION ALL SELECT 1 FROM staff WHERE center_id=? UNION ALL SELECT 1 FROM vehicles WHERE center_id=? LIMIT 1").bind(id, id, id).first();
+      if (used) return NextResponse.json({ error: "لا يمكن حذف المركز قبل حذف أو نقل المحطات والموظفين والمركبات التابعة له." }, { status: 409 });
+      await env.DB.prepare("DELETE FROM centers WHERE id=?").bind(id).run();
+    } else if (entity === "station") {
+      if (!id) return NextResponse.json({ error: "المحطة غير محددة" }, { status: 400 });
+      const used = await env.DB.prepare("SELECT 1 FROM operational_assignments WHERE station_id=? UNION ALL SELECT 1 FROM vehicle_maintenance WHERE station_id=? LIMIT 1").bind(id, id).first();
+      if (used) return NextResponse.json({ error: "لا يمكن حذف المحطة لأنها مرتبطة بسجلات تشغيلية أو صيانة. يمكن تعديلها بدلًا من ذلك." }, { status: 409 });
+      await env.DB.prepare("DELETE FROM stations WHERE id=?").bind(id).run();
+    } else if (entity === "vehicle") {
+      if (!id) return NextResponse.json({ error: "المركبة غير محددة" }, { status: 400 });
+      const used = await env.DB.prepare("SELECT 1 FROM incidents WHERE vehicle_id=? UNION ALL SELECT 1 FROM fuel_fillings WHERE vehicle_id=? UNION ALL SELECT 1 FROM vehicle_movements WHERE vehicle_id=? UNION ALL SELECT 1 FROM vehicle_maintenance WHERE vehicle_id=? LIMIT 1").bind(id, id, id, id).first();
+      if (used) return NextResponse.json({ error: "لا يمكن حذف المركبة لأنها مرتبطة ببلاغات أو حركة أو وقود أو صيانة. أخرجيها من الخدمة بدلًا من الحذف." }, { status: 409 });
+      await env.DB.prepare("DELETE FROM vehicles WHERE id=?").bind(id).run();
+    } else if (entity === "staff") {
+      if (!id) return NextResponse.json({ error: "الموظف غير محدد" }, { status: 400 });
+      const used = await env.DB.prepare("SELECT 1 FROM operational_assignments WHERE staff_id=? UNION ALL SELECT 1 FROM vehicle_movements WHERE driver_staff_id=? UNION ALL SELECT 1 FROM fuel_fillings WHERE driver_staff_id=? OR filled_by_staff_id=? LIMIT 1").bind(id, id, id, id).first();
+      if (used) return NextResponse.json({ error: "لا يمكن حذف الموظف لوجود سجلات تشغيلية مرتبطة به. غيّري حالته الوظيفية بدلًا من الحذف." }, { status: 409 });
+      await env.DB.prepare("DELETE FROM staff WHERE id=?").bind(id).run();
+    } else {
+      return NextResponse.json({ error: "نوع الإعداد غير معروف" }, { status: 400 });
+    }
+    await env.DB.prepare("INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,?,?,?,?)")
+      .bind(access.email, "delete", entity, String(id || key || ""), "حذف من الإعدادات").run();
+    return NextResponse.json({ ok: true });
+  } catch {
+    return NextResponse.json({ error: "تعذر الحذف لوجود بيانات مرتبطة بهذا العنصر" }, { status: 409 });
+  }
 }

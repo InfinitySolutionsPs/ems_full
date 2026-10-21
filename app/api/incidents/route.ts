@@ -147,7 +147,7 @@ export async function POST(request: NextRequest) {
   try {
     const incidentCode = String(clean(body.incidentCode) || await nextIncidentCode());
     const incidentNumber = String(clean(body.incidentNumber) || incidentCode);
-    const chosenVehicle = requiresMovement && body.vehicle ? await env.DB.prepare("SELECT v.id,v.mileage_km FROM vehicles v JOIN stations s ON s.id=v.station_id WHERE v.plate_number=? AND v.active=1 AND s.name=?").bind(body.vehicle,body.station).first<{id:number;mileage_km:number|null}>() : null;
+    const chosenVehicle = requiresMovement && body.vehicle ? await env.DB.prepare("SELECT v.id,v.mileage_km FROM vehicles v JOIN stations s ON s.center_id=v.center_id WHERE v.plate_number=? AND v.active=1 AND s.name=?").bind(body.vehicle,body.station).first<{id:number;mileage_km:number|null}>() : null;
     if (!isDraft && requiresMovement && body.vehicle && !chosenVehicle) return NextResponse.json({error:"المركبة لا تتبع المحطة المختارة أو أنها خارج الخدمة"},{status:400});
     kmStart=chosenVehicle?Number(chosenVehicle.mileage_km||0):0;
     if (!isDraft && kmEnd!=null && (!Number.isFinite(kmEnd) || kmEnd<kmStart)) return NextResponse.json({error:"عداد النهاية يجب أن يساوي أو يزيد عن عداد المركبة الحالي"},{status:400});
@@ -247,7 +247,7 @@ export async function PATCH(request: NextRequest) {
   }
   let kmStart = 0;
   const kmEnd = body.kmEnd === "" || body.kmEnd == null ? null : Number(body.kmEnd);
-  const chosenVehicle = requiresMovement && body.vehicle ? await env.DB.prepare("SELECT v.id,v.mileage_km FROM vehicles v JOIN stations s ON s.id=v.station_id WHERE v.plate_number=? AND s.name=?").bind(body.vehicle,body.station).first<{id:number;mileage_km:number|null}>() : null;
+  const chosenVehicle = requiresMovement && body.vehicle ? await env.DB.prepare("SELECT v.id,v.mileage_km FROM vehicles v JOIN stations s ON s.center_id=v.center_id WHERE v.plate_number=? AND s.name=?").bind(body.vehicle,body.station).first<{id:number;mileage_km:number|null}>() : null;
   if (submissionAction === "approve" && requiresMovement && body.vehicle && !chosenVehicle) return NextResponse.json({error:"المركبة لا تتبع المحطة المختارة"},{status:400});
   kmStart=chosenVehicle?Number(chosenVehicle.mileage_km||0):0;
   if (submissionAction === "approve" && kmEnd!=null && (!Number.isFinite(kmEnd) || kmEnd<kmStart)) return NextResponse.json({error:"عداد النهاية يجب أن يساوي أو يزيد عن عداد المركبة الحالي"},{status:400});

@@ -19,17 +19,18 @@ export async function GET(request: NextRequest) {
   ]);
   const existingFleet=await env.DB.prepare("SELECT plate_number FROM vehicles").all();
   const knownFleet=new Set(existingFleet.results.map((x:any)=>String(x.plate_number).replace(/\s/g,"")));
-  const stationRows=await env.DB.prepare("SELECT id,code FROM stations").all();
-  const stationIds=new Map(stationRows.results.map((x:any)=>[x.code,Number(x.id)]));
+  const stationRows=await env.DB.prepare("SELECT code,center_id FROM stations").all();
+  const centerIds=new Map(stationRows.results.map((x:any)=>[x.code,Number(x.center_id)]));
   const stationCode=(location:string)=>String(location||"").includes("دير")?"DEI":String(location||"").includes("جباليا")?"JAB":"GAZ";
   const pending=fleet.filter((v:any)=>!knownFleet.has(String(v.plate).replace(/\s/g,"")));
-  for(let i=0;i<pending.length;i+=40) await env.DB.batch(pending.slice(i,i+40).map((v:any)=>env.DB.prepare("INSERT INTO vehicles (plate_number,manufacturer,model,production_year,chassis_number,fuel_type,mileage_km,ambulance_type,usage_status,work_location,service_status,active,fleet_source_row,station_id) VALUES (?,?,?,?,?,?,?,?,? ,?,'active',1,?,?) ON CONFLICT(plate_number) DO NOTHING").bind(v.plate,v.manufacturer||null,v.model||null,Number(v.productionYear)||null,v.chassis||null,v.fuelType||null,Number(v.mileage)||null,v.ambulanceType||null,v.usage||null,v.location||null,v.sourceRow,stationIds.get(stationCode(v.location))||null)));
+  for(let i=0;i<pending.length;i+=40) await env.DB.batch(pending.slice(i,i+40).map((v:any)=>env.DB.prepare("INSERT INTO vehicles (plate_number,manufacturer,model,production_year,chassis_number,fuel_type,mileage_km,ambulance_type,usage_status,work_location,service_status,active,fleet_source_row,center_id) VALUES (?,?,?,?,?,?,?,?,? ,?,'active',1,?,?) ON CONFLICT(plate_number) DO NOTHING").bind(v.plate,v.manufacturer||null,v.model||null,Number(v.productionYear)||null,v.chassis||null,v.fuelType||null,Number(v.mileage)||null,v.ambulanceType||null,v.usage||null,v.location||null,v.sourceRow,centerIds.get(stationCode(v.location))||null)));
   const station = access.profile.role === "station_user" ? access.profile.station : null;
   const from = new URL(request.url).searchParams.get("from") || "1900-01-01";
   const to = new URL(request.url).searchParams.get("to") || "2999-12-31";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) return reply("الفترة غير صالحة");
-  const vehicles = await env.DB.prepare("SELECT v.*, s.name station_name FROM vehicles v LEFT JOIN stations s ON s.id=v.station_id ORDER BY v.plate_number").all();
-  const available = station ? vehicles.results.filter((v: any) => v.station_name === station) : vehicles.results;
+  const vehicles = await env.DB.prepare("SELECT v.*,v.center_id station_id,c.name station_name,c.name center_name FROM vehicles v LEFT JOIN centers c ON c.id=v.center_id ORDER BY v.plate_number").all();
+  const scope = station ? await env.DB.prepare("SELECT center_id FROM stations WHERE name=? LIMIT 1").bind(station).first<any>() : null;
+  const available = scope?.center_id ? vehicles.results.filter((v: any) => Number(v.center_id) === Number(scope.center_id)) : station ? [] : vehicles.results;
   const ids = new Set(available.map((v: any) => Number(v.id)));
   const [fuel, movements, incidents] = await env.DB.batch([
     env.DB.prepare("SELECT f.*,v.plate_number,i.incident_number FROM fuel_fillings f JOIN vehicles v ON v.id=f.vehicle_id LEFT JOIN incidents i ON i.id=f.incident_id WHERE substr(f.filled_at,1,10) BETWEEN ? AND ? ORDER BY f.filled_at DESC LIMIT 1000").bind(from,to),
@@ -53,14 +54,14 @@ export async function POST(request: NextRequest) {
   const b = await request.json() as Record<string,unknown>;
   if (b.action === "import") {
     if (!hasPermission(access.profile,"fleet.manage")) return reply("استيراد الأسطول غير مسموح",403);
-    const [existing,stationList] = await env.DB.batch([env.DB.prepare("SELECT plate_number FROM vehicles"),env.DB.prepare("SELECT id,code FROM stations")]);
+    const [existing,stationList] = await env.DB.batch([env.DB.prepare("SELECT plate_number FROM vehicles"),env.DB.prepare("SELECT code,center_id FROM stations")]);
     const known = new Set(existing.results.map((v:any)=>text(v.plate_number).replace(/\s/g,"")));
-    const stationIds = new Map(stationList.results.map((s:any)=>[s.code,Number(s.id)]));
+    const centerIds = new Map(stationList.results.map((s:any)=>[s.code,Number(s.center_id)]));
     const stationCode = (location:string) => location.includes("دير")?"DEI":location.includes("خانيونس")?"KHA":location.includes("جباليا")?"JAB":location.includes("رفح")?"RAF":location==="غزة"?"GAZ":null;
     const safe = fleet.filter(v=>v.plate !== "3-2003-55" && v.plate !== "3-0257-55" && !known.has(v.plate.replace(/\s/g,"")));
     for (let i=0;i<safe.length;i+=40) {
-      await env.DB.batch(safe.slice(i,i+40).map(v=>env.DB.prepare("INSERT OR IGNORE INTO vehicles (plate_number,manufacturer,model,production_year,chassis_number,fuel_type,mileage_km,ambulance_type,usage_status,work_location,service_status,out_of_service_reason,active,fleet_source_row,station_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-        .bind(v.plate,v.manufacturer||null,v.model||null,Number(v.productionYear)||null,v.chassis||null,v.fuelType||null,Number(v.mileage)||null,v.ambulanceType||null,v.usage||null,v.location||null,"active",v.reason||null,1,v.sourceRow,stationIds.get(stationCode(v.location))||null)));
+      await env.DB.batch(safe.slice(i,i+40).map(v=>env.DB.prepare("INSERT OR IGNORE INTO vehicles (plate_number,manufacturer,model,production_year,chassis_number,fuel_type,mileage_km,ambulance_type,usage_status,work_location,service_status,out_of_service_reason,active,fleet_source_row,center_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
+        .bind(v.plate,v.manufacturer||null,v.model||null,Number(v.productionYear)||null,v.chassis||null,v.fuelType||null,Number(v.mileage)||null,v.ambulanceType||null,v.usage||null,v.location||null,"active",v.reason||null,1,v.sourceRow,centerIds.get(stationCode(v.location))||null)));
     }
     await env.DB.prepare("UPDATE incidents SET vehicle_id=(SELECT id FROM vehicles WHERE TRIM(plate_number)=TRIM(incidents.vehicle) LIMIT 1) WHERE vehicle_id IS NULL AND vehicle IS NOT NULL AND EXISTS (SELECT 1 FROM vehicles WHERE TRIM(plate_number)=TRIM(incidents.vehicle))").run();
     return NextResponse.json({ok:true,added:safe.length,skipped:fleet.length-safe.length,review:2});
@@ -78,9 +79,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ok:true,added});
   }
   const vehicleId = Number(b.vehicleId);
-  const vehicle = await env.DB.prepare("SELECT v.*,s.name station_name FROM vehicles v LEFT JOIN stations s ON s.id=v.station_id WHERE v.id=?").bind(vehicleId).first<any>();
+  const vehicle = await env.DB.prepare("SELECT v.*,c.name center_name FROM vehicles v LEFT JOIN centers c ON c.id=v.center_id WHERE v.id=?").bind(vehicleId).first<any>();
   if (!vehicle) return reply("المركبة غير موجودة");
-  if (access.profile.role === "station_user" && vehicle.station_name !== access.profile.station) return reply("المركبة خارج نطاق محطتك",403);
+  if (access.profile.role === "station_user") { const own=await env.DB.prepare("SELECT center_id FROM stations WHERE name=? LIMIT 1").bind(access.profile.station).first<any>(); if(!own || Number(vehicle.center_id)!==Number(own.center_id)) return reply("المركبة خارج نطاق مركزك",403); }
   const incidentId = number(b.incidentId);
   if (incidentId != null && (!Number.isInteger(incidentId) || incidentId < 1)) return reply("رقم البلاغ غير صالح");
   if (incidentId != null) {
