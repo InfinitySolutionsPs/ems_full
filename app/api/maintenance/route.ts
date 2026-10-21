@@ -38,8 +38,8 @@ export async function GET(request: NextRequest) {
   const stationId = Number(query.get("stationId") || 0);
   if (!Number.isInteger(vehicleId) || !Number.isInteger(stationId) || vehicleId < 0 || stationId < 0) return error("الفلاتر غير صالحة");
   const [vehicles, stations, requests] = await env.DB.batch([
-    env.DB.prepare("SELECT v.id,v.plate_number,v.active,v.service_status,v.station_id,s.name station_name FROM vehicles v LEFT JOIN stations s ON s.id=v.station_id ORDER BY v.plate_number"),
-    env.DB.prepare("SELECT id,name,governorate FROM stations ORDER BY name"),
+    env.DB.prepare("SELECT v.id,v.plate_number,v.active,v.service_status,v.center_id,c.name center_name FROM vehicles v LEFT JOIN centers c ON c.id=v.center_id ORDER BY v.plate_number"),
+    env.DB.prepare("SELECT id,name,governorate,center_id FROM stations ORDER BY name"),
     env.DB.prepare(`SELECT m.*,v.plate_number,v.manufacturer,v.model,s.name station_name
       FROM vehicle_maintenance m JOIN vehicles v ON v.id=m.vehicle_id JOIN stations s ON s.id=m.station_id
       WHERE m.request_date BETWEEN ? AND ? AND (?=0 OR m.vehicle_id=?) AND (?=0 OR m.station_id=?)
@@ -70,10 +70,10 @@ export async function POST(request: NextRequest) {
   const requestedRepair = str(form.get("requestedRepair"));
   const driverName = str(form.get("driverName"));
   if (!Number.isInteger(vehicleId) || vehicleId < 1 || !Number.isInteger(stationId) || stationId < 1 || !Number.isFinite(odometer) || odometer < 0 || !date(requestDate) || !department || !requestedRepair || !driverName) return error("أكملي بيانات الطلب والعداد والتاريخ");
-  const vehicle = await env.DB.prepare("SELECT v.id,v.active,v.service_status,v.station_id,s.name station_name FROM vehicles v LEFT JOIN stations s ON s.id=v.station_id WHERE v.id=?").bind(vehicleId).first<any>();
-  const station = await env.DB.prepare("SELECT id,name FROM stations WHERE id=?").bind(stationId).first<any>();
+  const vehicle = await env.DB.prepare("SELECT v.id,v.active,v.service_status,v.center_id,c.name center_name FROM vehicles v LEFT JOIN centers c ON c.id=v.center_id WHERE v.id=?").bind(vehicleId).first<any>();
+  const station = await env.DB.prepare("SELECT id,name,center_id FROM stations WHERE id=?").bind(stationId).first<any>();
   if (!vehicle || !station) return error("المركبة أو المركز غير موجود");
-  if (vehicle.station_id && vehicle.station_id !== stationId) return error("المركز لا يطابق المركز المسجل للمركبة");
+  if (vehicle.center_id && Number(vehicle.center_id) !== Number(station.center_id)) return error("المحطة لا تتبع المركز المسجل للمركبة");
   if (access.profile?.role === "station_user" && station.name !== access.profile.station) return error("المركبة خارج نطاق محطتك", 403);
   if (!vehicle.active || vehicle.service_status !== "active") return error("المركبة خارج الخدمة أو لديها طلب صيانة مفتوح");
   const key = `maintenance/${crypto.randomUUID()}`;

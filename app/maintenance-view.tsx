@@ -4,8 +4,8 @@ import { useCallback, useEffect, useState } from "react";
 import { ClipboardCheck, Download, FileText, Filter, PlusCircle, RefreshCw, Wrench, X } from "lucide-react";
 import { toast } from "sonner";
 
-type Vehicle = { id: number; plate_number: string; active: number; service_status: string; station_id: number | null; station_name: string | null };
-type Station = { id: number; name: string };
+type Vehicle = { id: number; plate_number: string; active: number; service_status: string; center_id: number | null; center_name: string | null };
+type Station = { id: number; name: string; center_id: number | null };
 type Maintenance = Record<string, string | number | null> & { id: number; vehicle_id: number; station_id: number; status: string; plate_number: string; station_name: string };
 const today = new Date().toISOString().slice(0, 10);
 const start = `${new Date().getUTCFullYear()}-01-01`;
@@ -14,6 +14,10 @@ export default function MaintenanceView({ onVehiclesChanged, prefill }: { onVehi
   const [filters, setFilters] = useState({ from: start, to: today, vehicleId: "", stationId: "" });
   const [data, setData] = useState<{ vehicles: Vehicle[]; stations: Station[]; requests: Maintenance[]; canClose: boolean }>({ vehicles: [], stations: [], requests: [], canClose: false });
   const [draft, setDraft] = useState({ vehicleId: "", stationId: "", requestDate: today, department: "", odometerKm: "", requestedRepair: "", failureCause: "", driverName: "", centerManagerName: "", circleManagerName: "", sourceIncidentCode: "" });
+  const selectedVehicle = data.vehicles.find((vehicle) => String(vehicle.id) === draft.vehicleId);
+  const availableStations = selectedVehicle?.center_id
+    ? data.stations.filter((station) => Number(station.center_id) === Number(selectedVehicle.center_id))
+    : [];
   const [file, setFile] = useState<File | null>(null);
   const [selected, setSelected] = useState<Maintenance | null>(null);
   const [closeDraft, setCloseDraft] = useState({ performedWork: "", receivedAt: today, receivedBy: "", maintenanceRecommendation: "", managerRecommendation: "", financeRecommendation: "", administrativeRecommendation: "" });
@@ -80,8 +84,8 @@ export default function MaintenanceView({ onVehiclesChanged, prefill }: { onVehi
     <form className="panel maintenance-form" onSubmit={submit}>
       <div className="maintenance-heading"><div><h3><PlusCircle /> طلب صيانة جديد</h3><p>بيانات نموذج أمر إصلاح سيارة</p></div></div>
       <div className="maintenance-fields">
-        <label>رقم المركبة *<select required value={draft.vehicleId} onChange={(event) => { const vehicle = data.vehicles.find((v) => String(v.id) === event.target.value); setDraft((previous) => ({ ...previous, vehicleId: event.target.value, stationId: vehicle?.station_id ? String(vehicle.station_id) : "" })); }}><option value="">اختر المركبة</option>{data.vehicles.map((v) => <option key={v.id} value={v.id} disabled={!v.active || v.service_status !== "active"}>{v.plate_number} — {v.station_name || "غير محدد"}{v.service_status === "maintenance" ? " (قيد الصيانة)" : !v.active ? " (خارج الخدمة)" : ""}</option>)}</select></label>
-        <label>المركز / الوحدة *<select required value={draft.stationId} onChange={(event) => setField("stationId", event.target.value)}><option value="">اختر المركز</option>{data.stations.map((station) => <option value={station.id} key={station.id}>{station.name}</option>)}</select></label>
+        <label>رقم المركبة *<select required value={draft.vehicleId} onChange={(event) => setDraft((previous) => ({ ...previous, vehicleId: event.target.value, stationId: "" }))}><option value="">اختر المركبة</option>{data.vehicles.map((v) => <option key={v.id} value={v.id} disabled={!v.active || v.service_status !== "active"}>{v.plate_number} — {v.center_name || "مركز غير محدد"}{v.service_status === "maintenance" ? " (قيد الصيانة)" : !v.active ? " (خارج الخدمة)" : ""}</option>)}</select></label>
+        <label>المحطة / الوحدة *<select required disabled={!draft.vehicleId} value={draft.stationId} onChange={(event) => setField("stationId", event.target.value)}><option value="">{draft.vehicleId ? "اختر محطة من مركز المركبة" : "اختر المركبة أولًا"}</option>{availableStations.map((station) => <option value={station.id} key={station.id}>{station.name}</option>)}</select></label>
         <label>تاريخ الطلب *<input required type="date" value={draft.requestDate} onChange={(event) => setField("requestDate", event.target.value)} /></label>
         <label>القسم *<input required value={draft.department} onChange={(event) => setField("department", event.target.value)} /></label>
         <label>رقم العداد (كم) *<input required type="number" min="0" step="0.1" value={draft.odometerKm} onChange={(event) => setField("odometerKm", event.target.value)} /></label>

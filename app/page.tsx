@@ -95,6 +95,17 @@ type Dashboard = {
 };
 
 const governors = ["غزة", "شمال غزة", "الوسطى", "خانيونس", "رفح"];
+const employmentStatuses: [string, string][] = [
+  ["on_duty", "على رأس عمله"],
+  ["leave", "إجازة"],
+  ["retired", "متقاعد"],
+  ["contract_ended", "انتهاء عقد"],
+  ["dismissed", "فصل"],
+  ["resigned", "استقالة"],
+  ["suspended", "موقوف عن العمل"],
+];
+const employmentStatusLabel = (value: unknown) =>
+  employmentStatuses.find(([key]) => key === String(value || "on_duty"))?.[1] || String(value || "على رأس عمله");
 const stations = [
   "محطة غزة",
   "محطة شمال غزة",
@@ -631,7 +642,7 @@ export default function HomePage() {
         )}
         {view === "capacity" && <OperationalCapacity data={settingsData} />}
         {view === "coordination" && <CoordinationView />}
-        {view === "fleet" && <FleetView staff={settingsData.staff} stationsData={settingsData.stations} onImported={loadAux} />}
+        {view === "fleet" && <FleetView staff={settingsData.staff} centersData={settingsData.centers} onImported={loadAux} />}
         {view === "maintenance" && <MaintenanceView onVehiclesChanged={loadAux} prefill={maintenancePrefill} />}
       </main>
     </div>
@@ -1023,8 +1034,8 @@ function IncidentForm({
   const selectedCenterId = Number(form.center || 0);
   const availableStations = (stationsData || []).filter((s:any) => !selectedCenterId || Number(s.center_id) === selectedCenterId);
   const selectedStation = (stationsData || []).find((s:any) => s.name === form.station);
-  const availableVehicles = selectedStation
-    ? (vehicles || []).filter((v:any) => v.active !== 0 && Number(v.station_id) === Number(selectedStation.id))
+  const availableVehicles = selectedCenterId
+    ? (vehicles || []).filter((v:any) => v.active !== 0 && Number(v.center_id) === selectedCenterId)
     : [];
   const selectedVehicle = (vehicles || []).find((v:any)=>v.plate_number===form.vehicle);
   const incidentStatus = form.incidentStatus || "completed";
@@ -1237,9 +1248,6 @@ function IncidentForm({
               value={form.station}
               onChange={(e) => {
                 setField("station", e.target.value);
-                setField("vehicle", "");
-                setField("kmStart", "");
-                setField("kmEnd", "");
               }}
             >
               <option value="">
@@ -1258,7 +1266,7 @@ function IncidentForm({
               رقم المركبة <em>*</em>
               <select
                 required
-                disabled={!selectedStation}
+                disabled={!selectedCenterId}
                 value={form.vehicle}
                 onChange={(e) => {
                   const plate = e.target.value;
@@ -1274,8 +1282,8 @@ function IncidentForm({
                 }}
               >
                 <option value="">
-                  {!selectedStation
-                    ? "اختر المحطة أولًا"
+                  {!selectedCenterId
+                    ? "اختر المركز أولًا"
                     : availableVehicles.length
                       ? "اختر المركبة..."
                       : "لا توجد مركبات مرتبطة بالمحطة"}
@@ -2515,7 +2523,7 @@ function OperationalCapacity({ data }: { data: any }) {
   const filterEmployees = (data.staff || []).filter((x:any)=>!centerFilter || String(x.center_id)===centerFilter);
   const draftStations = (data.stations || []).filter((x:any)=>String(x.center_id)===String(draft.centerId));
   const draftEmployees = (data.staff || []).filter((x:any)=>String(x.center_id)===String(draft.centerId));
-  const draftVehicles = (data.vehicles || []).filter((x:any)=>x.active!==0 && String(x.station_id)===String(draft.stationId));
+  const draftVehicles = (data.vehicles || []).filter((x:any)=>x.active!==0 && String(x.center_id)===String(draft.centerId));
   return (
     <div className="page-stack capacity-page">
       <section className="form-hero">
@@ -2694,7 +2702,7 @@ function OperationalCapacity({ data }: { data: any }) {
           <label>
             المركبة
             <select
-              disabled={!draft.stationId}
+              disabled={!draft.centerId}
               value={draft.vehicleId}
               onChange={(e) =>
                 setDraft({ ...draft, vehicleId: e.target.value })
@@ -3231,7 +3239,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
         ["model", "الموديل"],
         ["ambulanceType", "نوع الإسعاف"],
         ["fuelType", "نوع الوقود"],
-        ["stationId", "المحطة المسؤولة"],
+        ["centerId", "المركز التابعة له"],
         ["mileageKm", "عداد المركبة الحالي"],
         ["workLocation", "مكان العمل"],
         ["serviceStatus", "حالة الخدمة"],
@@ -3247,6 +3255,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
         ["cadreType", "الكادر"],
         ["jobTitle", "الوظيفة"],
         ["centerId", "المركز"],
+        ["employmentStatus", "الحالة الوظيفية"],
         ["startYear", "سنة الالتحاق"],
         ["gender", "الجنس"],
         ["birthYear", "سنة الميلاد"],
@@ -3299,6 +3308,20 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
     toast.success(editingId ? "تم تعديل المدخل" : "تم حفظ الإعداد");
     setDraft({});
     setEditingId(null);
+    reload();
+  };
+  const remove = async (row: any) => {
+    const name = row.full_name || row.plate_number || row.name || row.value || row.label || "هذا العنصر";
+    if (!confirm(`حذف «${name}» نهائيًا؟ لن يمكن التراجع عن هذه العملية.`)) return;
+    const response = await fetch("/api/settings", {
+      method: "DELETE",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(c.simpleSetting ? { entity: "setting", key: row.key } : { entity: tab, id: row.id }),
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) return toast.error(result.error || "تعذر حذف العنصر");
+    if (editingId === (row.id ?? row.key)) { setEditingId(null); setDraft({}); }
+    toast.success("تم حذف العنصر");
     reload();
   };
   return (
@@ -3384,6 +3407,10 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                       <option value="">اختر...</option>
                       {(key === "fuelType" ? [["بنزين","بنزين"],["سولار","سولار"]] : [["active","داخل الخدمة"],["out_of_service","خارج الخدمة"]]).map(([value,label])=><option key={value} value={value}>{label}</option>)}
                     </select>
+                  ) : key === "employmentStatus" ? (
+                    <select required value={draft.employmentStatus || "on_duty"} onChange={e=>setDraft({...draft,employmentStatus:e.target.value})}>
+                      {employmentStatuses.map(([value,label])=><option key={value} value={value}>{label}</option>)}
+                    </select>
                   ) : key === "governorate" ? (
                     <select
                       required
@@ -3457,7 +3484,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                 <thead>
                   <tr>
                     {(c.simpleSetting ? ["الاسم"] : tab === "staff"
-                      ? ["الاسم", "المركز", "سنة الالتحاق", "الجنس", "سنة الميلاد", "الفئة", "مستوى المسعف", "المؤهل الطبي", "رخصة الإسعاف"]
+                      ? ["الاسم", "المركز", "الحالة الوظيفية", "سنة الالتحاق", "الجنس", "سنة الميلاد", "الفئة", "مستوى المسعف", "المؤهل الطبي", "رخصة الإسعاف"]
                       : tab === "center"
                         ? ["الرمز", "اسم المركز", "المحافظة"]
                       : tab === "station"
@@ -3468,7 +3495,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                             "الموديل",
                             "نوع الإسعاف",
                             "الوقود",
-                            "المحطة",
+                            "المركز",
                             "العداد الحالي",
                             "مكان العمل",
                             "سبب التوقف",
@@ -3476,7 +3503,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                     ).map((x) => (
                       <th key={x}>{x}</th>
                     ))}
-                    {!c.simpleSetting && <th>الحالة</th>}
+                    {!c.simpleSetting && tab !== "staff" && <th>الحالة</th>}
                     <th>إجراء</th>
                   </tr>
                 </thead>
@@ -3484,7 +3511,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                   {(tab === "staff" ? staffRows : (c.rows || [])).map((r: any) => (
                     <tr key={r.id ?? r.key}>
                       {(c.simpleSetting ? [r.value] : tab === "staff"
-                        ? (()=>{let d:any={};try{d=JSON.parse(r.detail||"{}")}catch{} return [r.full_name,r.center_name||d.station,d.startYear,d.gender==="Male"?"ذكر":d.gender==="Female"?"أنثى":d.gender,d.birthYear,d.category||r.cadre_type,d.emtLevel||r.job_title,d.medicalQualification==="None"?"—":d.medicalQualification,d.ambulanceLicence==="Yes"?"نعم":d.ambulanceLicence==="No"?"لا":"—"]})()
+                        ? (()=>{let d:any={};try{d=JSON.parse(r.detail||"{}")}catch{} return [r.full_name,r.center_name||d.station,employmentStatusLabel(r.employment_status),d.startYear,d.gender==="Male"?"ذكر":d.gender==="Female"?"أنثى":d.gender,d.birthYear,d.category||r.cadre_type,d.emtLevel||r.job_title,d.medicalQualification==="None"?"—":d.medicalQualification,d.ambulanceLicence==="Yes"?"نعم":d.ambulanceLicence==="No"?"لا":"—"]})()
                         : tab === "center"
                           ? [r.code, r.name, r.governorate]
                         : tab === "station"
@@ -3495,7 +3522,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                               r.model,
                               r.ambulance_type,
                               r.fuel_type,
-                              data.stations?.find((s:any)=>s.id===r.station_id)?.name,
+                              r.center_name || data.centers?.find((center:any)=>center.id===r.center_id)?.name,
                               r.mileage_km,
                               r.work_location,
                               r.out_of_service_reason,
@@ -3505,11 +3532,11 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                           {i === 0 ? <b>{v || "—"}</b> : v || "—"}
                         </td>
                       ))}
-                      {!c.simpleSetting && <td>
+                      {!c.simpleSetting && tab !== "staff" && <td>
                         <span
                           className={`state ${r.active === 0 ? "" : "active"}`}
                         >
-                          {tab === "vehicle" && r.service_status === "maintenance" ? "قيد الصيانة" : r.active === 0 ? "موقوف" : "نشط"}
+                          {tab === "staff" ? employmentStatusLabel(r.employment_status) : tab === "vehicle" && r.service_status === "maintenance" ? "قيد الصيانة" : r.active === 0 ? "موقوف" : "نشط"}
                         </span>
                       </td>}
                       <td>
@@ -3525,6 +3552,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                                     fullName: r.full_name || "",
                                     cadreType: r.cadre_type || "",
                                     jobTitle: r.job_title || "",
+                                    employmentStatus: r.employment_status || "on_duty",
                                     detail: r.detail || "",
                                   }
                                 : tab === "center"
@@ -3542,7 +3570,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                                       model: r.model || "",
                                       ambulanceType: r.ambulance_type || "",
                                       fuelType: r.fuel_type || "",
-                                      stationId: String(r.station_id||""),
+                                      centerId: String(r.center_id||""),
                                       mileageKm: String(r.mileage_km||0),
                                       workLocation: r.work_location || "",
                                       serviceStatus: r.service_status || (r.active ? "active" : "out_of_service"),
@@ -3553,6 +3581,9 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                           }}
                         >
                           <Pencil /> تعديل
+                        </button>
+                        <button type="button" className="employee-delete" onClick={() => remove(r)}>
+                          <Trash2 /> حذف
                         </button>
                       </td>
                     </tr>
@@ -3610,7 +3641,7 @@ function ReportsV2({
       const ids=new Set(centerStations.map((station:any)=>Number(station.id)));
       const records=reportIncidents.filter((incident:any)=>names.has(String(incident.station||"")));
       const shift=(value:string)=>records.filter((incident:any)=>String(incident.shift||"").toUpperCase()===value).length;
-      return {center:center.name,a:shift("A"),b:shift("B"),c:shift("C"),total:records.length,staff:(settingsData.staff||[]).filter((person:any)=>ids.has(Number(person.station_id))&&person.active!==0).length,vehicles:(settingsData.vehicles||[]).filter((vehicle:any)=>ids.has(Number(vehicle.station_id))&&vehicle.active!==0&&vehicle.service_status!=="maintenance").length,male:records.filter((x:any)=>x.gender==="Male").length,female:records.filter((x:any)=>x.gender==="Female").length,children:records.filter((x:any)=>Number(x.age||0)>0&&Number(x.age)<18).length,adults:records.filter((x:any)=>Number(x.age||0)>=18&&Number(x.age)<60).length,elderly:records.filter((x:any)=>Number(x.age||0)>=60).length,martyrs:records.filter((x:any)=>x.category==="Martyr"||Boolean(x.patient_deceased)).length,injuries:records.filter((x:any)=>x.category==="Trauma"||x.category==="Accident").length,medical:records.filter((x:any)=>x.category==="Medical").length,cancelled:records.filter((x:any)=>Boolean(x.cancelled)||String(x.incident_status||"").startsWith("cancelled")).length};
+      return {center:center.name,a:shift("A"),b:shift("B"),c:shift("C"),total:records.length,staff:(settingsData.staff||[]).filter((person:any)=>Number(person.center_id)===Number(center.id)&&person.active!==0).length,vehicles:(settingsData.vehicles||[]).filter((vehicle:any)=>Number(vehicle.center_id)===Number(center.id)&&vehicle.active!==0&&vehicle.service_status!=="maintenance").length,male:records.filter((x:any)=>x.gender==="Male").length,female:records.filter((x:any)=>x.gender==="Female").length,children:records.filter((x:any)=>Number(x.age||0)>0&&Number(x.age)<18).length,adults:records.filter((x:any)=>Number(x.age||0)>=18&&Number(x.age)<60).length,elderly:records.filter((x:any)=>Number(x.age||0)>=60).length,martyrs:records.filter((x:any)=>x.category==="Martyr"||Boolean(x.patient_deceased)).length,injuries:records.filter((x:any)=>x.category==="Trauma"||x.category==="Accident").length,medical:records.filter((x:any)=>x.category==="Medical").length,cancelled:records.filter((x:any)=>Boolean(x.cancelled)||String(x.incident_status||"").startsWith("cancelled")).length};
     });
     const keys=kind==="periodic"?["center","a","b","c","total","staff","vehicles"]:["center","total","male","female","children","adults","elderly","martyrs","injuries","medical","cancelled"];
     const labels:Record<string,string>={center:"المركز",a:"الوردية A",b:"الوردية B",c:"الوردية C",total:"إجمالي المستفيدين",staff:"العاملون المسجلون",vehicles:"المركبات العاملة",male:"ذكور",female:"إناث",children:"أطفال",adults:"بالغون",elderly:"كبار السن",martyrs:"شهداء/وفاة",injuries:"إصابات وحوادث",medical:"حالات مرضية",cancelled:"بلاغات ملغاة"};
@@ -3859,7 +3890,7 @@ function ReportContent({
       const shift=(name:string)=>rows.filter((incident:any)=>String(incident.shift||"").toUpperCase()===name).length;
       const male=rows.filter((incident:any)=>incident.gender==="Male").length;
       const female=rows.filter((incident:any)=>incident.gender==="Female").length;
-      return {id:center.id,name:center.name,rows,total:rows.length,a:shift("A"),b:shift("B"),c:shift("C"),staff:staff.filter((person:any)=>stationIds.has(Number(person.station_id))&&person.active!==0).length,vehicles:vehicles.filter((vehicle:any)=>stationIds.has(Number(vehicle.station_id))&&vehicle.active!==0&&vehicle.service_status!=="maintenance").length,male,female,children:rows.filter((incident:any)=>Number(incident.age||0)>0&&Number(incident.age)<18).length,adults:rows.filter((incident:any)=>Number(incident.age||0)>=18&&Number(incident.age)<60).length,elderly:rows.filter((incident:any)=>Number(incident.age||0)>=60).length,martyrs:rows.filter((incident:any)=>incident.category==="Martyr"||Boolean(incident.patient_deceased)).length,injuries:rows.filter((incident:any)=>incident.category==="Trauma"||incident.category==="Accident").length,medical:rows.filter((incident:any)=>incident.category==="Medical").length,cancelled:rows.filter((incident:any)=>Boolean(incident.cancelled)||String(incident.incident_status||"").startsWith("cancelled")).length};
+      return {id:center.id,name:center.name,rows,total:rows.length,a:shift("A"),b:shift("B"),c:shift("C"),staff:staff.filter((person:any)=>Number(person.center_id)===Number(center.id)&&person.active!==0).length,vehicles:vehicles.filter((vehicle:any)=>Number(vehicle.center_id)===Number(center.id)&&vehicle.active!==0&&vehicle.service_status!=="maintenance").length,male,female,children:rows.filter((incident:any)=>Number(incident.age||0)>0&&Number(incident.age)<18).length,adults:rows.filter((incident:any)=>Number(incident.age||0)>=18&&Number(incident.age)<60).length,elderly:rows.filter((incident:any)=>Number(incident.age||0)>=60).length,martyrs:rows.filter((incident:any)=>incident.category==="Martyr"||Boolean(incident.patient_deceased)).length,injuries:rows.filter((incident:any)=>incident.category==="Trauma"||incident.category==="Accident").length,medical:rows.filter((incident:any)=>incident.category==="Medical").length,cancelled:rows.filter((incident:any)=>Boolean(incident.cancelled)||String(incident.incident_status||"").startsWith("cancelled")).length};
     });
     const total=(key:string)=>centerRows.reduce((sum:number,row:any)=>sum+Number(row[key]||0),0);
     if(type==="periodic")return <section className="panel table-panel report-sheet periodic-report" dir="rtl">
@@ -3929,22 +3960,22 @@ function ReportContent({
                   <td>
                     {(settingsData.staff || []).filter(
                       (s: any) =>
-                        Number(s.station_id) ===
+                        Number(s.center_id) ===
                         Number(
                           (settingsData.stations || []).find(
                             (q: any) => q.name === x.name,
-                          )?.id,
+                          )?.center_id,
                         ),
                     ).length || "—"}
                   </td>
                   <td>
                     {(settingsData.vehicles || []).filter(
                       (v: any) =>
-                        Number(v.station_id) ===
+                        Number(v.center_id) ===
                         Number(
                           (settingsData.stations || []).find(
                             (q: any) => q.name === x.name,
-                          )?.id,
+                          )?.center_id,
                         ),
                     ).length || "—"}
                   </td>
@@ -4413,7 +4444,10 @@ function MovementReport({from,to}:{from:string;to:string}) {
   return <div className="page-stack movement-report" dir="rtl"><button hidden id="movement-report-export" onClick={exportRows}/><section className="panel movement-options"><div className="filter-title"><span className="filter-mark"><SlidersHorizontal/></span><span><b>فلاتر سجل الحركة</b><small>{rows.length} حركة ضمن الفترة المختارة</small></span></div><div className="movement-option-fields"><label>المركبة<select value={options.vehicle} onChange={e=>setOptions({...options,vehicle:e.target.value})}><option value="all">جميع المركبات</option>{vehicles.map((v:any)=><option key={v.id} value={v.id}>{v.plate_number}</option>)}</select></label><label>المحطة<select value={options.station} onChange={e=>setOptions({...options,station:e.target.value})}><option value="all">كل المحطات</option>{[...new Map(vehicles.filter((v:any)=>v.station_id).map((v:any)=>[v.station_id,v.station_name])).entries()].map(([id,name]:any)=><option key={id} value={id}>{name}</option>)}</select></label><label>السائق<select value={options.driver} onChange={e=>setOptions({...options,driver:e.target.value})}><option value="all">كل السائقين</option>{[...new Set((data.movements||[]).map((m:any)=>m.driver_name).filter(Boolean))].map((name:any)=><option key={name}>{name}</option>)}</select></label><label>ربط البلاغ<select value={options.linked} onChange={e=>setOptions({...options,linked:e.target.value})}><option value="all">الكل</option><option value="yes">مرتبطة ببلاغ</option><option value="no">دون بلاغ</option></select></label><button className="ghost" onClick={()=>setOptions({vehicle:"all",station:"all",driver:"all",linked:"all"})}><RefreshCw/> مسح</button></div></section><section className="panel movement-sheet"><div className="movement-letterhead"><b>جمعية الهلال الأحمر الفلسطيني</b><span>دائرة الإسعاف والطوارئ</span><h2>تقرير حركة سيارات الإسعاف</h2><p>من {from} إلى {to} · المركبة: {options.vehicle==="all"?"جميع المركبات":vehicles.find((v:any)=>String(v.id)===options.vehicle)?.plate_number} · عدد الحركات: {rows.length} · مجموع المسافة المسجلة: {total.toFixed(1)} كم</p></div><div className="table-wrap"><table><thead><tr>{["م","التاريخ","السائق","المركبة","المحطة","الخروج","العودة","الوجهة","عداد البداية","عداد النهاية","المسافة كم","البلاغ","ملاحظات"].map(x=><th key={x}>{x}</th>)}</tr></thead><tbody>{rows.map((m:any,i:number)=><tr key={m.id}><td>{i+1}</td><td>{String(m.departed_at||"").slice(0,10)}</td><td>{m.driver_name||"—"}</td><td>{m.plate_number||"—"}</td><td>{vehicles.find((v:any)=>v.id===m.vehicle_id)?.station_name||"—"}</td><td>{m.departed_at||"—"}</td><td>{m.returned_at||"قيد الحركة"}</td><td>{m.destination||"—"}</td><td>{m.km_start??"—"}</td><td>{m.km_end??"—"}</td><td>{distance(m)==null?"—":distance(m).toFixed(1)}</td><td>{m.incident_number||"—"}</td><td>{m.notes||"—"}</td></tr>)}</tbody></table>{!rows.length&&<Empty/>}</div></section></div>;
 }
 
-function FleetView({staff,stationsData,onImported}:{staff:any[];stationsData:any[];onImported:()=>void}) {
+function FleetView({staff,centersData,onImported}:{staff:any[];centersData:any[];onImported:()=>void}) {
+  // Kept as a local alias while the fleet view transitions from station ownership
+  // to center ownership; values and identifiers below are centers.
+  const stationsData = centersData;
   const [period,setPeriod]=useState({from:monthStart,to:today});
   const [data,setData]=useState<any>({vehicles:[],fuel:[],movements:[],incidents:[],importReview:[]});
   const [tab,setTab]=useState<"fill"|"movement">("fill");
@@ -4424,8 +4458,8 @@ function FleetView({staff,stationsData,onImported}:{staff:any[];stationsData:any
   const [vehicleFilters,setVehicleFilters]=useState({search:"",station:"all",fuel:"all",status:"all"});
   const [editVehicle,setEditVehicle]=useState<any>(null);
   const [newVehicle,setNewVehicle]=useState<any>(null);
-  const fleetRows=(data.vehicles||[]).filter((v:any)=>(!vehicleFilters.search || `${v.plate_number} ${v.manufacturer||""} ${v.work_location||""}`.toLowerCase().includes(vehicleFilters.search.toLowerCase())) && (vehicleFilters.station==="all" || (vehicleFilters.station==="unassigned" ? !v.station_id : String(v.station_id||"")===vehicleFilters.station)) && (vehicleFilters.fuel==="all" || v.fuel_type===vehicleFilters.fuel) && (vehicleFilters.status==="all" || (v.service_status==="maintenance"?"maintenance":v.active?"active":"out_of_service")===vehicleFilters.status));
-  const saveVehicle=async(e:React.FormEvent)=>{e.preventDefault();if(!editVehicle)return;setBusy(true);try{const r=await fetch("/api/settings",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({entity:"vehicle",id:editVehicle.id,plateNumber:editVehicle.plate_number,manufacturer:editVehicle.manufacturer,model:editVehicle.model,ambulanceType:editVehicle.ambulance_type,fuelType:editVehicle.fuel_type,stationId:editVehicle.station_id,mileageKm:editVehicle.mileage_km,workLocation:editVehicle.work_location,serviceStatus:editVehicle.service_status,outOfServiceReason:editVehicle.out_of_service_reason})});const v=await r.json();if(!r.ok)throw Error(v.error||"تعذر تعديل المركبة");toast.success("تم حفظ بيانات المركبة");setEditVehicle(null);await load();onImported()}catch(err){toast.error(String(err).replace(/^Error: /,""))}finally{setBusy(false)}};
+  const fleetRows=(data.vehicles||[]).filter((v:any)=>(!vehicleFilters.search || `${v.plate_number} ${v.manufacturer||""} ${v.work_location||""}`.toLowerCase().includes(vehicleFilters.search.toLowerCase())) && (vehicleFilters.station==="all" || (vehicleFilters.station==="unassigned" ? !v.center_id : String(v.center_id||"")===vehicleFilters.station)) && (vehicleFilters.fuel==="all" || v.fuel_type===vehicleFilters.fuel) && (vehicleFilters.status==="all" || (v.service_status==="maintenance"?"maintenance":v.active?"active":"out_of_service")===vehicleFilters.status));
+  const saveVehicle=async(e:React.FormEvent)=>{e.preventDefault();if(!editVehicle)return;setBusy(true);try{const r=await fetch("/api/settings",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({entity:"vehicle",id:editVehicle.id,plateNumber:editVehicle.plate_number,manufacturer:editVehicle.manufacturer,model:editVehicle.model,ambulanceType:editVehicle.ambulance_type,fuelType:editVehicle.fuel_type,centerId:editVehicle.center_id,mileageKm:editVehicle.mileage_km,workLocation:editVehicle.work_location,serviceStatus:editVehicle.service_status,outOfServiceReason:editVehicle.out_of_service_reason})});const v=await r.json();if(!r.ok)throw Error(v.error||"تعذر تعديل المركبة");toast.success("تم حفظ بيانات المركبة");setEditVehicle(null);await load();onImported()}catch(err){toast.error(String(err).replace(/^Error: /,""))}finally{setBusy(false)}};
   const addVehicle=async(e:React.FormEvent)=>{e.preventDefault();if(!newVehicle)return;setBusy(true);try{const r=await fetch("/api/settings",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({entity:"vehicle",...newVehicle})});const v=await r.json();if(!r.ok)throw Error(v.error||"تعذر إضافة المركبة");toast.success("تمت إضافة المركبة");setNewVehicle(null);await load();onImported()}catch(err){toast.error(String(err).replace(/^Error: /,""))}finally{setBusy(false)}};
   const importArchiveFile=async(e:React.ChangeEvent<HTMLInputElement>)=>{const file=e.target.files?.[0];if(!file)return;try{const text=await file.text();const lines=text.split(/\r?\n/).filter(Boolean);const rows=lines.slice(1).map(line=>line.split(",")).filter(x=>x[0]).map(x=>({plate:x[0],manufacturer:x[1],model:x[2],fuelType:x[3],location:x[4],status:x[5]||"داخل الخدمة"}));const r=await fetch("/api/fleet",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:"importArchive",rows})});const v=await r.json();if(!r.ok)throw Error(v.error||"تعذر استيراد الأرشيف");toast.success(`تم استيراد ${v.added||0} مركبة من الأرشيف`);await load();onImported()}catch(err){toast.error(String(err).replace(/^Error: /,""))}e.target.value=""};
   const selected=data.vehicles.find((v:any)=>String(v.id)===vehicleId);
@@ -4444,7 +4478,7 @@ function FleetView({staff,stationsData,onImported}:{staff:any[];stationsData:any
     const csv=[heads,...data.fuel.map((x:any)=>[x.filled_at,x.plate_number,x.fuel_type,x.liters,x.odometer_km,x.driver_name,x.filled_by_name,x.incident_number,x.voucher_number])].map(row=>row.map((v:any)=>`"${String(v??"").replaceAll('"','""')}"`).join(",")).join("\n");
     const a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\ufeff",csv],{type:"text/csv;charset=utf-8"}));a.download=`fleet-fuel-${period.from}-${period.to}.csv`;a.click();URL.revokeObjectURL(a.href)};
   return <div className="page-stack fleet-page">
-    <section className="panel fleet-head"><div><h2><Ambulance/> المركبات والوقود</h2><p>المركبة مرجع موحد للتعبئة والحركة والبلاغات. اللترات المعبأة لا تعني استهلاكًا فعليًا دون قياس مستوى الخزان.</p></div><div className="fleet-head-actions"><button className="primary" onClick={()=>setNewVehicle({plateNumber:"",manufacturer:"",model:"",ambulanceType:"",fuelType:"",stationId:"",mileageKm:"0",workLocation:"",serviceStatus:"active"})}><PlusCircle/> إضافة مركبة</button><label className="archive-import ghost"><Upload/> استيراد الأرشيف<input type="file" accept=".csv,text/csv" onChange={importArchiveFile}/></label><button className="ghost" onClick={importFleet} disabled={busy}><PlusCircle/> استيراد سيارات سبتمبر</button></div></section>
+    <section className="panel fleet-head"><div><h2><Ambulance/> المركبات والوقود</h2><p>المركبة مرجع موحد للتعبئة والحركة والبلاغات. اللترات المعبأة لا تعني استهلاكًا فعليًا دون قياس مستوى الخزان.</p></div><div className="fleet-head-actions"><button className="primary" onClick={()=>setNewVehicle({plateNumber:"",manufacturer:"",model:"",ambulanceType:"",fuelType:"",centerId:"",mileageKm:"0",workLocation:"",serviceStatus:"active"})}><PlusCircle/> إضافة مركبة</button><label className="archive-import ghost"><Upload/> استيراد الأرشيف<input type="file" accept=".csv,text/csv" onChange={importArchiveFile}/></label><button className="ghost" onClick={importFleet} disabled={busy}><PlusCircle/> استيراد سيارات سبتمبر</button></div></section>
     <section className="panel fleet-filters"><label>من تاريخ<input type="date" value={period.from} onChange={e=>setPeriod({...period,from:e.target.value})}/></label><label>إلى تاريخ<input type="date" value={period.to} onChange={e=>setPeriod({...period,to:e.target.value})}/></label><span>إجمالي الأسطول: {data.vehicles.length} مركبة</span><button className="ghost" onClick={load}><RefreshCw/> تحديث</button></section>
     <section className="fleet-metrics"><article><b>{data.fuel.length}</b><span>عمليات التعبئة</span></article><article><b>{fuelLiters.toFixed(1)}</b><span>لتر مُعبّأ</span></article><article><b>{data.movements.length}</b><span>حركات مسجلة</span></article><article><b>{kmTotal.toFixed(1)}</b><span>كم من سجلات الحركة</span></article></section>
     <section className="panel"><PanelTitle icon={PlusCircle} title="إضافة حركة أو تعبئة" subtitle="يرتبط السجل بمركبة من الإعدادات، ويمكن إسناده لبلاغ موجود"/>
@@ -4460,7 +4494,7 @@ function FleetView({staff,stationsData,onImported}:{staff:any[];stationsData:any
       <div className="fleet-section-head"><PanelTitle icon={Ambulance} title="دليل المركبات" subtitle={`${fleetRows.length} من أصل ${data.vehicles.length} مركبة — التعديل متاح لمدير النظام`}/></div>
       <div className="fleet-table-filters">
         <label className="fleet-search-label"><Search/> <input aria-label="بحث برقم اللوحة أو النوع أو مكان العمل" placeholder="رقم اللوحة أو النوع أو مكان العمل" value={vehicleFilters.search} onChange={e=>setVehicleFilters({...vehicleFilters,search:e.target.value})}/></label>
-        <label>المحطة<select value={vehicleFilters.station} onChange={e=>setVehicleFilters({...vehicleFilters,station:e.target.value})}><option value="all">كل المحطات</option>{stationsData.map((s:any)=><option key={s.id} value={s.id}>{s.name}</option>)}<option value="unassigned">غير محددة</option></select></label>
+        <label>المركز<select value={vehicleFilters.station} onChange={e=>setVehicleFilters({...vehicleFilters,station:e.target.value})}><option value="all">كل المراكز</option>{centersData.map((center:any)=><option key={center.id} value={center.id}>{center.name}</option>)}<option value="unassigned">غير محدد</option></select></label>
         <label>نوع الوقود<select value={vehicleFilters.fuel} onChange={e=>setVehicleFilters({...vehicleFilters,fuel:e.target.value})}><option value="all">جميع الأنواع</option><option value="بنزين">بنزين</option><option value="سولار">سولار</option></select></label>
         <label>حالة الخدمة<select value={vehicleFilters.status} onChange={e=>setVehicleFilters({...vehicleFilters,status:e.target.value})}><option value="all">كل الحالات</option><option value="active">داخل الخدمة</option><option value="maintenance">قيد الصيانة</option><option value="out_of_service">خارج الخدمة</option></select></label>
         <button className="ghost" onClick={()=>setVehicleFilters({search:"",station:"all",fuel:"all",status:"all"})}><RefreshCw/> مسح</button>
