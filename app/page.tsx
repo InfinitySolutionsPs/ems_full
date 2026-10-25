@@ -3188,6 +3188,9 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
     [draft, setDraft] = useState<Record<string, string>>({}),
     [editingId, setEditingId] = useState<number | string | null>(null);
   const [staffFilters, setStaffFilters] = useState({search:"",station:"all",category:"all",level:"all"});
+  const [staffPage, setStaffPage] = useState(1);
+  const [staffPageSize, setStaffPageSize] = useState(10);
+  const [selectedStaff, setSelectedStaff] = useState<any>(null);
   const [cleaningStaff, setCleaningStaff] = useState(false);
   const [importingStaff, setImportingStaff] = useState(false);
   const staffImportRef = useRef<HTMLInputElement>(null);
@@ -3316,13 +3319,37 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
   };
   const c = configs[tab];
   const staffRows = (data.staff || []).filter((r:any) => { let d:any={}; try { d=JSON.parse(r.detail||"{}"); } catch {} return (!staffFilters.search || `${r.full_name} ${r.center_name||""} ${r.job_title||""} ${d.employeeNumber||""} ${d.nationalId||""} ${d.mobile||""}`.toLowerCase().includes(staffFilters.search.toLowerCase())) && (staffFilters.station==="all" || String(r.center_id)===staffFilters.station) && (staffFilters.category==="all" || (d.category||r.cadre_type)===staffFilters.category) && (staffFilters.level==="all" || (d.emtLevel||r.job_title)===staffFilters.level); });
-  const staffDetail = (raw: any) => {
-    if (!raw) return "—";
-    try {
-      const d = typeof raw === "string" ? JSON.parse(raw) : raw;
-      return [d.station && `المركز: ${d.station}`, d.startYear && `الالتحاق: ${d.startYear}`, d.gender && `الجنس: ${d.gender === "Male" ? "ذكر" : d.gender === "Female" ? "أنثى" : d.gender}`, d.birthYear && `الميلاد: ${d.birthYear}`, d.medicalQualification && d.medicalQualification !== "None" && `المؤهل: ${d.medicalQualification}`, d.ambulanceLicence && `الرخصة: ${d.ambulanceLicence === "Yes" ? "نعم" : "لا"}`].filter(Boolean).join(" · ") || "—";
-    } catch { return String(raw); }
+  const staffPageCount = Math.max(1, Math.ceil(staffRows.length / staffPageSize));
+  const activeStaffPage = Math.min(staffPage, staffPageCount);
+  const paginatedStaffRows = staffRows.slice((activeStaffPage - 1) * staffPageSize, activeStaffPage * staffPageSize);
+  const parseStaffDetail = (raw: any) => { try { return JSON.parse(raw || "{}"); } catch { return {}; } };
+  const beginStaffEdit = (r:any) => {
+    const d=parseStaffDetail(r.detail);
+    setSelectedStaff(null);
+    setEditingId(r.id);
+    setDraft({
+      centerId:String(r.center_id||""), employeeNumber:d.employeeNumber||"", nationalId:d.nationalId||"", mobile:d.mobile||"",
+      startYear:d.startYear||"", gender:d.gender||"", birthYear:d.birthYear||"", category:d.category||r.cadre_type||"",
+      emtLevel:d.emtLevel||r.job_title||"", medicalQualification:d.medicalQualification||"", ambulanceLicence:d.ambulanceLicence||"",
+      fullName:r.full_name||"", cadreType:r.cadre_type||"", jobTitle:r.job_title||"", employmentStatus:r.employment_status||"on_duty", detail:r.detail||"",
+    });
+    requestAnimationFrame(()=>document.querySelector(".settings-form")?.scrollIntoView({behavior:"smooth",block:"center"}));
   };
+  const selectedStaffDetail = selectedStaff ? parseStaffDetail(selectedStaff.detail) : {};
+  const selectedStaffFields = selectedStaff ? [
+    ["الاسم الكامل", selectedStaff.full_name], ["الاسم بالإنجليزية", selectedStaffDetail.englishName],
+    ["الرقم الوظيفي", selectedStaffDetail.employeeNumber], ["رقم الهوية", selectedStaffDetail.nationalId],
+    ["رقم الجوال", selectedStaffDetail.mobile], ["المركز", selectedStaff.center_name || selectedStaffDetail.station],
+    ["مكان العمل الأصلي", selectedStaffDetail.workLocation], ["نوع الكادر", selectedStaff.cadre_type],
+    ["الوظيفة", selectedStaff.job_title], ["الحالة الوظيفية", employmentStatusLabel(selectedStaff.employment_status)],
+    ["الجنس", selectedStaffDetail.gender === "Male" ? "ذكر" : selectedStaffDetail.gender === "Female" ? "أنثى" : selectedStaffDetail.gender],
+    ["سنة الالتحاق", selectedStaffDetail.startYear], ["تاريخ الميلاد", selectedStaffDetail.birthDate || selectedStaffDetail.birthYear],
+    ["عدد أفراد العائلة", selectedStaffDetail.familyCount], ["الفئة", selectedStaffDetail.category || selectedStaff.cadre_type],
+    ["مستوى المسعف", selectedStaffDetail.emtLevel || selectedStaff.job_title],
+    ["المؤهل الطبي", selectedStaffDetail.medicalQualification === "None" ? "لا يوجد" : selectedStaffDetail.medicalQualification],
+    ["رخصة الإسعاف", selectedStaffDetail.ambulanceLicence === "Yes" ? "نعم" : selectedStaffDetail.ambulanceLicence === "No" ? "لا" : selectedStaffDetail.ambulanceLicence],
+    ["ملاحظات", selectedStaffDetail.notes],
+  ] : [];
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     const simpleSetting = Boolean(c.simpleSetting);
@@ -3510,13 +3537,13 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
               title={c.title}
               subtitle="القائمة المعتمدة في النظام"
             />
-            {tab === "staff" && <div className="staff-directory-filters"><label className="staff-search"><Search/><input placeholder="بحث بالاسم أو المركز أو الوظيفة" value={staffFilters.search} onChange={e=>setStaffFilters({...staffFilters,search:e.target.value})}/></label><label>المركز<select value={staffFilters.station} onChange={e=>setStaffFilters({...staffFilters,station:e.target.value})}><option value="all">كل المراكز</option>{(data.centers||[]).map((x:any)=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>الفئة<select value={staffFilters.category} onChange={e=>setStaffFilters({...staffFilters,category:e.target.value})}><option value="all">كل الفئات</option>{[...new Set((data.staff||[]).map((r:any)=>{try{const d=JSON.parse(r.detail||"{}");return d.category||r.cadre_type}catch{return r.cadre_type}}).filter(Boolean))].map((x:any)=><option key={x}>{x}</option>)}</select></label><label>مستوى المسعف<select value={staffFilters.level} onChange={e=>setStaffFilters({...staffFilters,level:e.target.value})}><option value="all">كل المستويات</option>{[...new Set((data.staff||[]).map((r:any)=>{try{const d=JSON.parse(r.detail||"{}");return d.emtLevel||r.job_title}catch{return r.job_title}}).filter(Boolean))].map((x:any)=><option key={x}>{x}</option>)}</select></label><button className="ghost" onClick={()=>setStaffFilters({search:"",station:"all",category:"all",level:"all"})}><RefreshCw/> مسح</button></div>}
+            {tab === "staff" && <div className="staff-directory-filters"><label className="staff-search"><Search/><input placeholder="بحث بالاسم أو المركز أو الوظيفة" value={staffFilters.search} onChange={e=>{setStaffFilters({...staffFilters,search:e.target.value});setStaffPage(1)}}/></label><label>المركز<select value={staffFilters.station} onChange={e=>{setStaffFilters({...staffFilters,station:e.target.value});setStaffPage(1)}}><option value="all">كل المراكز</option>{(data.centers||[]).map((x:any)=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>الفئة<select value={staffFilters.category} onChange={e=>{setStaffFilters({...staffFilters,category:e.target.value});setStaffPage(1)}}><option value="all">كل الفئات</option>{[...new Set((data.staff||[]).map((r:any)=>{try{const d=JSON.parse(r.detail||"{}");return d.category||r.cadre_type}catch{return r.cadre_type}}).filter(Boolean))].map((x:any)=><option key={x}>{x}</option>)}</select></label><label>مستوى المسعف<select value={staffFilters.level} onChange={e=>{setStaffFilters({...staffFilters,level:e.target.value});setStaffPage(1)}}><option value="all">كل المستويات</option>{[...new Set((data.staff||[]).map((r:any)=>{try{const d=JSON.parse(r.detail||"{}");return d.emtLevel||r.job_title}catch{return r.job_title}}).filter(Boolean))].map((x:any)=><option key={x}>{x}</option>)}</select></label><button className="ghost" onClick={()=>{setStaffFilters({search:"",station:"all",category:"all",level:"all"});setStaffPage(1)}}><RefreshCw/> مسح</button></div>}
             <div className="table-wrap employee-directory">
               <table>
                 <thead>
                   <tr>
                     {(c.simpleSetting ? ["الاسم"] : tab === "staff"
-                      ? ["الاسم", "الرقم الوظيفي", "رقم الهوية", "الجوال", "المركز", "الحالة الوظيفية", "سنة الالتحاق", "الجنس", "سنة الميلاد", "الفئة", "مستوى المسعف", "المؤهل الطبي", "رخصة الإسعاف"]
+                      ? ["الاسم", "الرقم الوظيفي", "رقم الهوية", "الجوال", "المركز", "الحالة الوظيفية", "الجنس", "الفئة", "مستوى المسعف"]
                       : tab === "center"
                         ? ["الرمز", "اسم المركز", "المحافظة"]
                       : tab === "station"
@@ -3540,10 +3567,10 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {(tab === "staff" ? staffRows : (c.rows || [])).map((r: any) => (
+                  {(tab === "staff" ? paginatedStaffRows : (c.rows || [])).map((r: any) => (
                     <tr key={r.id ?? r.key}>
                       {(c.simpleSetting ? [r.value] : tab === "staff"
-                        ? (()=>{let d:any={};try{d=JSON.parse(r.detail||"{}")}catch{} return [r.full_name,d.employeeNumber,d.nationalId,d.mobile,r.center_name||d.station,employmentStatusLabel(r.employment_status),d.startYear,d.gender==="Male"?"ذكر":d.gender==="Female"?"أنثى":d.gender,d.birthYear,d.category||r.cadre_type,d.emtLevel||r.job_title,d.medicalQualification==="None"?"—":d.medicalQualification,d.ambulanceLicence==="Yes"?"نعم":d.ambulanceLicence==="No"?"لا":"—"]})()
+                        ? (()=>{const d=parseStaffDetail(r.detail); return [r.full_name,d.employeeNumber,d.nationalId,d.mobile,r.center_name||d.station,employmentStatusLabel(r.employment_status),d.gender==="Male"?"ذكر":d.gender==="Female"?"أنثى":d.gender,d.category||r.cadre_type,d.emtLevel||r.job_title]})()
                         : tab === "center"
                           ? [r.code, r.name, r.governorate]
                         : tab === "station"
@@ -3561,7 +3588,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                             ]
                       ).map((v: any, i: number) => (
                         <td key={i}>
-                          {i === 0 ? <b>{v || "—"}</b> : v || "—"}
+                          {tab === "staff" && i === 0 ? <button type="button" className="staff-name-link" onClick={()=>setSelectedStaff(r)}>{v || "—"}</button> : i === 0 ? <b>{v || "—"}</b> : v || "—"}
                         </td>
                       ))}
                       {!c.simpleSetting && tab !== "staff" && <td>
@@ -3575,6 +3602,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                         <button
                           className="employee-edit"
                           onClick={() => {
+                            if (tab === "staff") { beginStaffEdit(r); return; }
                             setEditingId(r.id);
                             if (c.simpleSetting) setEditingId(r.key);
                             setDraft(
@@ -3623,8 +3651,24 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                 </tbody>
               </table>
               {!(tab === "staff" ? staffRows : c.rows)?.length && <Empty />}
+              {tab === "staff" && staffRows.length > 0 && <div className="staff-pagination">
+                <span>عرض {(activeStaffPage-1)*staffPageSize+1}–{Math.min(activeStaffPage*staffPageSize,staffRows.length)} من {staffRows.length} موظفًا</span>
+                <label>عدد الموظفين في الصفحة<select value={staffPageSize} onChange={event=>{setStaffPageSize(Number(event.target.value));setStaffPage(1)}}>{[10,25,50,100].map(size=><option key={size} value={size}>{size}</option>)}</select></label>
+                <nav aria-label="صفحات دليل الموظفين">
+                  <button type="button" disabled={activeStaffPage===1} onClick={()=>setStaffPage(page=>Math.max(1,page-1))}>السابق</button>
+                  {Array.from({length:staffPageCount},(_,index)=>index+1).filter(page=>page===1||page===staffPageCount||Math.abs(page-activeStaffPage)<=2).map((page,index,pages)=><span key={page}>{index>0&&page-pages[index-1]>1&&<i>…</i>}<button type="button" className={page===activeStaffPage?"active":""} onClick={()=>setStaffPage(page)}>{page}</button></span>)}
+                  <button type="button" disabled={activeStaffPage===staffPageCount} onClick={()=>setStaffPage(page=>Math.min(staffPageCount,page+1))}>التالي</button>
+                </nav>
+              </div>}
             </div>
           </section>
+          {selectedStaff && <div className="modal-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)setSelectedStaff(null)}}>
+            <section className="incident-detail-modal staff-detail-modal" dir="rtl">
+              <div className="modal-head"><div><h2>{selectedStaff.full_name}</h2><p>الملف الكامل للموظف</p></div><button type="button" className="icon-btn" onClick={()=>setSelectedStaff(null)}><X/></button></div>
+              <div className="staff-detail-grid">{selectedStaffFields.map(([label,value])=><article key={String(label)} className={label==="ملاحظات"?"wide":""}><span>{label}</span><b>{value || "—"}</b></article>)}</div>
+              <div className="modal-actions"><button type="button" className="ghost" onClick={()=>setSelectedStaff(null)}>إغلاق</button><button type="button" className="primary" onClick={()=>beginStaffEdit(selectedStaff)}><Pencil/> تعديل بيانات الموظف</button></div>
+            </section>
+          </div>}
         </>
       )}
     </div>
