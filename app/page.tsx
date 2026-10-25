@@ -103,6 +103,8 @@ const employmentStatuses: [string, string][] = [
   ["dismissed", "فصل"],
   ["resigned", "استقالة"],
   ["suspended", "موقوف عن العمل"],
+  ["abroad", "مسافر"],
+  ["detained", "معتقل"],
 ];
 const employmentStatusLabel = (value: unknown) =>
   employmentStatuses.find(([key]) => key === String(value || "on_duty"))?.[1] || String(value || "على رأس عمله");
@@ -3187,6 +3189,8 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
     [editingId, setEditingId] = useState<number | string | null>(null);
   const [staffFilters, setStaffFilters] = useState({search:"",station:"all",category:"all",level:"all"});
   const [cleaningStaff, setCleaningStaff] = useState(false);
+  const [importingStaff, setImportingStaff] = useState(false);
+  const staffImportRef = useRef<HTMLInputElement>(null);
   const cleanDuplicateStaff = async () => {
     setCleaningStaff(true);
     try {
@@ -3210,6 +3214,30 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
       toast.error("تعذر إكمال فحص الموظفين");
     } finally {
       setCleaningStaff(false);
+    }
+  };
+  const importStaffSpreadsheet = async (file: File) => {
+    setImportingStaff(true);
+    try {
+      const requestImport = async (dryRun:boolean) => {
+        const body=new FormData(); body.set("entity","importStaffSpreadsheet"); body.set("file",file); body.set("dryRun",String(dryRun));
+        return fetch("/api/settings",{method:"POST",body});
+      };
+      const preview = await requestImport(true);
+      const summary = await preview.json();
+      if (!preview.ok) return toast.error(summary.error || "تعذر فحص ملف الموظفين");
+      const message = `سيتم استيراد ${summary.unique} موظفًا من ملف ${file.name}: إضافة ${summary.added} وتحديث ${summary.updated}${summary.skippedDeleted ? `، مع تجاهل ${summary.skippedDeleted} موظفًا محذوفًا سابقًا` : ""}. هل تريدين المتابعة؟`;
+      if (!confirm(message)) return;
+      const response = await requestImport(false);
+      const result = await response.json();
+      if (!response.ok) return toast.error(result.error || "تعذر استيراد الموظفين");
+      toast.success(`تمت إضافة ${result.added} وتحديث ${result.updated} موظفًا`);
+      reload();
+    } catch {
+      toast.error("تعذر استيراد ملف الموظفين");
+    } finally {
+      setImportingStaff(false);
+      if (staffImportRef.current) staffImportRef.current.value="";
     }
   };
   const configs: any = {
@@ -3252,6 +3280,9 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
       icon: UsersRound,
       fields: [
         ["fullName", "الاسم الكامل"],
+        ["employeeNumber", "الرقم الوظيفي"],
+        ["nationalId", "رقم الهوية"],
+        ["mobile", "رقم الجوال"],
         ["cadreType", "الكادر"],
         ["jobTitle", "الوظيفة"],
         ["centerId", "المركز"],
@@ -3284,7 +3315,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
     },
   };
   const c = configs[tab];
-  const staffRows = (data.staff || []).filter((r:any) => { let d:any={}; try { d=JSON.parse(r.detail||"{}"); } catch {} return (!staffFilters.search || `${r.full_name} ${r.center_name||""} ${r.job_title||""}`.toLowerCase().includes(staffFilters.search.toLowerCase())) && (staffFilters.station==="all" || String(r.center_id)===staffFilters.station) && (staffFilters.category==="all" || (d.category||r.cadre_type)===staffFilters.category) && (staffFilters.level==="all" || (d.emtLevel||r.job_title)===staffFilters.level); });
+  const staffRows = (data.staff || []).filter((r:any) => { let d:any={}; try { d=JSON.parse(r.detail||"{}"); } catch {} return (!staffFilters.search || `${r.full_name} ${r.center_name||""} ${r.job_title||""} ${d.employeeNumber||""} ${d.nationalId||""} ${d.mobile||""}`.toLowerCase().includes(staffFilters.search.toLowerCase())) && (staffFilters.station==="all" || String(r.center_id)===staffFilters.station) && (staffFilters.category==="all" || (d.category||r.cadre_type)===staffFilters.category) && (staffFilters.level==="all" || (d.emtLevel||r.job_title)===staffFilters.level); });
   const staffDetail = (raw: any) => {
     if (!raw) return "—";
     try {
@@ -3295,7 +3326,8 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     const simpleSetting = Boolean(c.simpleSetting);
-    const payload = tab === "staff" ? { ...draft, detail: JSON.stringify({station:(data.centers||[]).find((c:any)=>String(c.id)===String(draft.centerId))?.name||"",startYear:draft.startYear||"",gender:draft.gender||"",birthYear:draft.birthYear||"",category:draft.category||draft.cadreType||"",emtLevel:draft.emtLevel||draft.jobTitle||"",medicalQualification:draft.medicalQualification||"",ambulanceLicence:draft.ambulanceLicence||""}) } : draft;
+    let existingDetail:any={}; try { existingDetail=JSON.parse(draft.detail||"{}"); } catch {}
+    const payload = tab === "staff" ? { ...draft, detail: JSON.stringify({...existingDetail,station:(data.centers||[]).find((c:any)=>String(c.id)===String(draft.centerId))?.name||existingDetail.station||"",employeeNumber:draft.employeeNumber||"",nationalId:draft.nationalId||"",mobile:draft.mobile||"",startYear:draft.startYear||"",gender:draft.gender||"",birthYear:draft.birthYear||"",category:draft.category||draft.cadreType||"",emtLevel:draft.emtLevel||draft.jobTitle||"",medicalQualification:draft.medicalQualification||"",ambulanceLicence:draft.ambulanceLicence||""}) } : draft;
     const r = await fetch("/api/settings", {
       method: simpleSetting ? "POST" : editingId ? "PATCH" : "POST",
       headers: { "content-type": "application/json" },
@@ -3469,7 +3501,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                 </button>
               )}
             </div>
-            {tab === "staff" && !editingId && <button type="button" className="ghost archive-staff-button" onClick={async()=>{const r=await fetch("/api/settings",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({entity:"importStaffArchive"})});const v=await r.json();if(!r.ok)return toast.error(v.error||"تعذر استيراد الموظفين");toast.success(`تم استيراد ${v.added} موظفًا من الملف`);reload();}}><Upload/> استيراد جميع الموظفين من ملف EMS</button>}
+            {tab === "staff" && !editingId && <><button type="button" className="ghost archive-staff-button" disabled={importingStaff} onClick={()=>staffImportRef.current?.click()}><Upload/> {importingStaff ? "جارٍ استيراد الموظفين…" : "استيراد الموظفين من Excel"}</button><input ref={staffImportRef} hidden type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={event=>{const file=event.target.files?.[0];if(file)importStaffSpreadsheet(file)}}/></>}
           </form>
           {tab === "staff" && <div className="staff-maintenance"><button type="button" className="ghost" disabled={cleaningStaff} onClick={cleanDuplicateStaff}><UsersRound/> {cleaningStaff ? "جارٍ فحص التكرار…" : "فحص وتنظيف تكرار الموظفين"}</button><span>يحذف السجلات المتطابقة بالكامل فقط ويحافظ على التكليفات وسجلات المركبات.</span></div>}
           <section className="panel table-panel">
@@ -3484,7 +3516,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                 <thead>
                   <tr>
                     {(c.simpleSetting ? ["الاسم"] : tab === "staff"
-                      ? ["الاسم", "المركز", "الحالة الوظيفية", "سنة الالتحاق", "الجنس", "سنة الميلاد", "الفئة", "مستوى المسعف", "المؤهل الطبي", "رخصة الإسعاف"]
+                      ? ["الاسم", "الرقم الوظيفي", "رقم الهوية", "الجوال", "المركز", "الحالة الوظيفية", "سنة الالتحاق", "الجنس", "سنة الميلاد", "الفئة", "مستوى المسعف", "المؤهل الطبي", "رخصة الإسعاف"]
                       : tab === "center"
                         ? ["الرمز", "اسم المركز", "المحافظة"]
                       : tab === "station"
@@ -3511,7 +3543,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                   {(tab === "staff" ? staffRows : (c.rows || [])).map((r: any) => (
                     <tr key={r.id ?? r.key}>
                       {(c.simpleSetting ? [r.value] : tab === "staff"
-                        ? (()=>{let d:any={};try{d=JSON.parse(r.detail||"{}")}catch{} return [r.full_name,r.center_name||d.station,employmentStatusLabel(r.employment_status),d.startYear,d.gender==="Male"?"ذكر":d.gender==="Female"?"أنثى":d.gender,d.birthYear,d.category||r.cadre_type,d.emtLevel||r.job_title,d.medicalQualification==="None"?"—":d.medicalQualification,d.ambulanceLicence==="Yes"?"نعم":d.ambulanceLicence==="No"?"لا":"—"]})()
+                        ? (()=>{let d:any={};try{d=JSON.parse(r.detail||"{}")}catch{} return [r.full_name,d.employeeNumber,d.nationalId,d.mobile,r.center_name||d.station,employmentStatusLabel(r.employment_status),d.startYear,d.gender==="Male"?"ذكر":d.gender==="Female"?"أنثى":d.gender,d.birthYear,d.category||r.cadre_type,d.emtLevel||r.job_title,d.medicalQualification==="None"?"—":d.medicalQualification,d.ambulanceLicence==="Yes"?"نعم":d.ambulanceLicence==="No"?"لا":"—"]})()
                         : tab === "center"
                           ? [r.code, r.name, r.governorate]
                         : tab === "station"
@@ -3548,7 +3580,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
                             setDraft(
                               c.simpleSetting ? {value:r.value||""} : tab === "staff"
                               ? {
-                                    ...(()=>{let d:any={};try{d=JSON.parse(r.detail||"{}")}catch{} return {centerId:String(r.center_id||""),startYear:d.startYear||"",gender:d.gender||"",birthYear:d.birthYear||"",category:d.category||r.cadre_type||"",emtLevel:d.emtLevel||r.job_title||"",medicalQualification:d.medicalQualification||"",ambulanceLicence:d.ambulanceLicence||""}})(),
+                                    ...(()=>{let d:any={};try{d=JSON.parse(r.detail||"{}")}catch{} return {centerId:String(r.center_id||""),employeeNumber:d.employeeNumber||"",nationalId:d.nationalId||"",mobile:d.mobile||"",startYear:d.startYear||"",gender:d.gender||"",birthYear:d.birthYear||"",category:d.category||r.cadre_type||"",emtLevel:d.emtLevel||r.job_title||"",medicalQualification:d.medicalQualification||"",ambulanceLicence:d.ambulanceLicence||""}})(),
                                     fullName: r.full_name || "",
                                     cadreType: r.cadre_type || "",
                                     jobTitle: r.job_title || "",

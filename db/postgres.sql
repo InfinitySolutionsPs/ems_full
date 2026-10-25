@@ -9,6 +9,12 @@ ALTER TABLE vehicles ADD COLUMN IF NOT EXISTS center_id BIGINT REFERENCES center
 CREATE TABLE IF NOT EXISTS staff (id BIGSERIAL PRIMARY KEY, full_name TEXT NOT NULL, station_id BIGINT REFERENCES stations(id), qualification TEXT, cadre_type TEXT NOT NULL DEFAULT 'كادر', job_title TEXT, detail TEXT, active INTEGER NOT NULL DEFAULT 1);
 ALTER TABLE staff ADD COLUMN IF NOT EXISTS center_id BIGINT REFERENCES centers(id);
 ALTER TABLE staff ADD COLUMN IF NOT EXISTS employment_status TEXT NOT NULL DEFAULT 'on_duty';
+CREATE TABLE IF NOT EXISTS deleted_staff_records (
+  normalized_name TEXT PRIMARY KEY,
+  full_name TEXT NOT NULL,
+  deleted_by TEXT,
+  deleted_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
 -- Vehicles belong to centers. Preserve legacy station links only for historical
 -- compatibility and seed the new ownership field from the station's center.
