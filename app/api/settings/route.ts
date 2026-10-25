@@ -2,13 +2,65 @@
 import { env } from "@/lib/server-env";
 import { NextRequest, NextResponse } from "next/server";
 import { getAccess,hasPermission } from "@/lib/access";
-import staffArchive from "@/lib/staff-archive.json";
+import { strFromU8, unzipSync } from "fflate";
 
 const employeeNameKey = (value: unknown) =>
   String(value || "").trim().replace(/\s+/g, " ").toLowerCase();
 const centerArabic: Record<string,string> = {
   "gaza":"غزة", "north gaza":"شمال غزة", "middle area":"الوسطى",
-  "khan yunis":"خانيونس", "rafah":"رفح",
+  "khan yunis":"خانيونس", "rafah":"رفح", "ديرالبلح":"الوسطى", "دير البلح":"الوسطى",
+};
+const professionArabic: Record<string,string> = {
+  "D":"سائق إسعاف", "P":"مسعف", "D/P":"سائق ومسعف", "DIS":"مُرحّل",
+};
+const excelCellText = (value: unknown) => {
+  if (value == null) return "";
+  if (value instanceof Date) return value.toISOString().slice(0,10);
+  if (typeof value === "object") {
+    const cell = value as Record<string,unknown>;
+    if (cell.text != null) return String(cell.text).trim();
+    if (cell.result != null) return String(cell.result).trim();
+  }
+  return String(value).trim().replace(/\.0$/, "");
+};
+const excelHeaderKey = (value: unknown) => excelCellText(value).replace(/\s+/g," ").toLowerCase();
+const xmlText = (value:string) => value
+  .replace(/<[^>]+>/g,"")
+  .replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
+  .replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&#(\d+);/g,(_,n)=>String.fromCodePoint(Number(n)));
+const xlsxRows = (buffer:ArrayBuffer) => {
+  const files=unzipSync(new Uint8Array(buffer));
+  const read=(path:string)=>files[path]?strFromU8(files[path]):"";
+  const sharedXml=read("xl/sharedStrings.xml");
+  const shared=[...sharedXml.matchAll(/<si\b[^>]*>([\s\S]*?)<\/si>/g)].map(match=>
+    [...match[1].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map(part=>xmlText(part[1])).join(""));
+  const workbookXml=read("xl/workbook.xml"), relationsXml=read("xl/_rels/workbook.xml.rels");
+  const relationId=workbookXml.match(/<sheet\b[^>]*r:id="([^"]+)"/)?.[1];
+  const target=relationId ? [...relationsXml.matchAll(/<Relationship\b([^>]+)\/?\s*>/g)]
+    .find(match=>new RegExp(`Id="${relationId}"`).test(match[1]))?.[1].match(/Target="([^"]+)"/)?.[1] : undefined;
+  const sheetPath=target ? `xl/${target.replace(/^\//,"").replace(/^xl\//,"")}` : "xl/worksheets/sheet1.xml";
+  const sheetXml=read(sheetPath);
+  if (!sheetXml) throw new Error("missing worksheet");
+  const rows:{number:number;cells:Map<number,string>}[]=[];
+  for (const rowMatch of sheetXml.matchAll(/<row\b([^>]*)>([\s\S]*?)<\/row>/g)) {
+    const rowNumber=Number(rowMatch[1].match(/r="(\d+)"/)?.[1]||rows.length+1);
+    const cells=new Map<number,string>();
+    for (const cellMatch of rowMatch[2].matchAll(/<c\b([^>]*)>([\s\S]*?)<\/c>/g)) {
+      const ref=cellMatch[1].match(/r="([A-Z]+)\d+"/)?.[1]; if(!ref)continue;
+      const column=[...ref].reduce((sum,char)=>sum*26+char.charCodeAt(0)-64,0);
+      const type=cellMatch[1].match(/t="([^"]+)"/)?.[1]||"n";
+      const raw=cellMatch[2].match(/<v>([\s\S]*?)<\/v>/)?.[1]||"";
+      const inline=[...cellMatch[2].matchAll(/<t\b[^>]*>([\s\S]*?)<\/t>/g)].map(part=>xmlText(part[1])).join("");
+      cells.set(column,type==="s"?shared[Number(raw)]||"":type==="inlineStr"?inline:xmlText(raw));
+    }
+    rows.push({number:rowNumber,cells});
+  }
+  return rows;
+};
+const excelDateText = (value:string) => {
+  if (!/^\d+(\.\d+)?$/.test(value)) return value;
+  const serial=Number(value); if(serial<20000||serial>80000)return value;
+  return new Date(Date.UTC(1899,11,30)+Math.floor(serial)*86400000).toISOString().slice(0,10);
 };
 
 export async function GET(request:NextRequest) {
@@ -46,17 +98,8 @@ export async function GET(request:NextRequest) {
     ["complaint_labor","آلام ولادة","آلام ولادة","chief_complaint"],
   ];
   await env.DB.batch(referenceDefaults.map(([key,value,label,category])=>env.DB.prepare("INSERT INTO system_settings (key,value,label,category,updated_by) SELECT ?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM system_settings WHERE key=?) ON CONFLICT(key) DO NOTHING").bind(key,value,label,category,"system",`deleted__${key}`)));
-  const existing = await env.DB.prepare("SELECT lower(trim(full_name)) name FROM staff").all();
-  const known = new Set(existing.results.map((x:any)=>employeeNameKey(x.name)));
-  const pending = (staffArchive as any[]).filter(row=>{
-    const name = employeeNameKey(row.fullName);
-    if (!name || known.has(name)) return false;
-    known.add(name);
-    return true;
-  });
-  for (let i=0;i<pending.length;i+=40) {
-    await env.DB.batch(pending.slice(i,i+40).map((row:any)=>env.DB.prepare("INSERT INTO staff (full_name,cadre_type,job_title,detail) VALUES (?,?,?,?)").bind(row.fullName, row.category || "غير محدد", row.emtLevel || "غير محدد", JSON.stringify({ station: row.station, startYear: row.startYear, gender: row.gender, birthYear: row.birthYear, category: row.category, emtLevel: row.emtLevel, medicalQualification: row.medicalQualification, ambulanceLicence: row.ambulanceLicence }))));
-  }
+  // Employee imports are explicit administrator actions. Never recreate deleted
+  // employees while merely loading the settings screen.
   await env.DB.prepare("INSERT INTO centers (name,governorate) SELECT DISTINCT governorate,governorate FROM stations WHERE governorate IS NOT NULL AND trim(governorate)<>'' ON CONFLICT(name) DO NOTHING").run();
   await env.DB.prepare("UPDATE stations SET center_id=(SELECT id FROM centers WHERE centers.name=stations.governorate LIMIT 1) WHERE center_id IS NULL").run();
   const centerRows = await env.DB.prepare("SELECT id,name FROM centers").all();
@@ -159,6 +202,83 @@ export async function POST(request: NextRequest) {
       { error: "الإعدادات متاحة لمدير النظام فقط" },
       { status: 403 },
     );
+  if ((request.headers.get("content-type")||"").includes("multipart/form-data")) {
+    const form = await request.formData();
+    if (form.get("entity") !== "importStaffSpreadsheet")
+      return NextResponse.json({ error: "نوع الاستيراد غير معروف" }, { status: 400 });
+    const file = form.get("file");
+    if (!(file instanceof File) || !file.size || file.size > 8*1024*1024 || !file.name.toLowerCase().endsWith(".xlsx"))
+      return NextResponse.json({ error: "اختاري ملف Excel بصيغة XLSX وبحجم لا يتجاوز 8 ميغابايت" }, { status: 400 });
+    try {
+      const workbookRows=xlsxRows(await file.arrayBuffer());
+      if (!workbookRows.length) return NextResponse.json({ error: "ملف Excel لا يحتوي على ورقة بيانات" }, { status: 400 });
+      let headerRow = 0;
+      const columns = new Map<string,number>();
+      for (const row of workbookRows.filter(row=>row.number<=12)) {
+        const candidate = new Map<string,number>();
+        row.cells.forEach((cell,column)=>candidate.set(excelHeaderKey(cell),column));
+        if (candidate.has("الاسم") && candidate.has("نوع الكادر") && candidate.has("مكان العمل")) {
+          headerRow=row.number; candidate.forEach((column,key)=>columns.set(key,column)); break;
+        }
+      }
+      if (!headerRow) return NextResponse.json({ error: "لم يتم العثور على عناوين الاسم ونوع الكادر ومكان العمل في الملف" }, { status: 400 });
+      const value = (row:{cells:Map<number,string>},...names:string[]) => {
+        const column = names.map(name=>columns.get(excelHeaderKey(name))).find(Boolean);
+        return column ? excelCellText(row.cells.get(column)) : "";
+      };
+      const source:any[]=[];
+      for (const row of workbookRows.filter(row=>row.number>headerRow&&row.number<=headerRow+3000)) {
+        const fullName=value(row,"الاسم").replace(/\s+/g," ").trim();
+        if (!fullName) continue;
+        let mobile=value(row,"MOBILE NO.","mobile no","الجوال");
+        if (/^5\d{8}$/.test(mobile)) mobile=`0${mobile}`;
+        source.push({
+          sourceRow:String(row.number), fullName, englishName:value(row,"Name"),
+          nationalId:value(row,"ID NO.","id no","رقم الهوية"), mobile,
+          gender:value(row,"الجنس"), profession:value(row,"المهنة Driver/ Paramedic"),
+          employeeNumber:value(row,"الرقم الوظيفي"), cadreType:value(row,"نوع الكادر"),
+          workLocation:value(row,"مكان العمل"), familyCount:value(row,"عدد افراد العائلة"),
+          birthDate:excelDateText(value(row,"تاريخ الميلاد")), notes:value(row,"ملاحظات"),
+        });
+      }
+      if (!source.length) return NextResponse.json({ error: "لم يتم العثور على موظفين صالحين داخل الملف" }, { status: 400 });
+      const [staffRows, centerRows, deletedRows] = await env.DB.batch([
+        env.DB.prepare("SELECT id,full_name FROM staff ORDER BY id"),
+        env.DB.prepare("SELECT id,name FROM centers"),
+        env.DB.prepare("SELECT normalized_name FROM deleted_staff_records"),
+      ]);
+      const existing = new Map((staffRows.results as any[]).map((row:any)=>[employeeNameKey(row.full_name),Number(row.id)]));
+      const centers = new Map((centerRows.results as any[]).map((row:any)=>[employeeNameKey(row.name),Number(row.id)]));
+      const deleted = new Set((deletedRows.results as any[]).map((row:any)=>String(row.normalized_name)));
+      const unique = new Map<string,any>(); source.forEach(row=>unique.set(employeeNameKey(row.fullName),row));
+      const importRows=[...unique.entries()];
+      const skippedDeleted=importRows.filter(([name])=>deleted.has(name)).length;
+      const addedCount=importRows.filter(([name])=>!deleted.has(name)&&!existing.has(name)).length;
+      const updatedCount=importRows.filter(([name])=>!deleted.has(name)&&existing.has(name)).length;
+      if (form.get("dryRun") === "true")
+        return NextResponse.json({ total:source.length,unique:importRows.length,added:addedCount,updated:updatedCount,skippedDeleted });
+      let added=0,updated=0; const statements:any[]=[];
+      for (const [nameKey,row] of importRows) {
+        if (deleted.has(nameKey)) continue;
+        const location=String(row.workLocation||"").trim();
+        const translatedCenter=centerArabic[employeeNameKey(location)]||location;
+        const centerId=centers.get(employeeNameKey(translatedCenter))||null;
+        const note=`${row.notes||""} ${location}`;
+        const employmentStatus=note.includes("معتقل")?"detained":note.includes("مسافر")?"abroad":"on_duty";
+        const jobTitle=professionArabic[String(row.profession||"").trim()]||String(row.profession||"غير محدد").trim();
+        const gender=row.gender==="M"?"Male":row.gender==="F"?"Female":"";
+        const detail=JSON.stringify({source:file.name,sourceRow:row.sourceRow,englishName:row.englishName,nationalId:row.nationalId,mobile:row.mobile,gender,professionCode:row.profession,employeeNumber:row.employeeNumber,station:translatedCenter||location,workLocation:location,familyCount:row.familyCount,birthDate:row.birthDate,birthYear:String(row.birthDate||"").slice(0,4),category:row.cadreType,emtLevel:jobTitle,notes:row.notes});
+        const id=existing.get(nameKey);
+        if (id) { statements.push(env.DB.prepare("UPDATE staff SET cadre_type=?,job_title=?,detail=?,center_id=COALESCE(?,center_id),employment_status=?,active=? WHERE id=?").bind(row.cadreType||"غير محدد",jobTitle,detail,centerId,employmentStatus,employmentStatus==="on_duty"?1:0,id)); updated++; }
+        else { statements.push(env.DB.prepare("INSERT INTO staff (full_name,cadre_type,job_title,detail,center_id,employment_status,active) VALUES (?,?,?,?,?,?,?)").bind(row.fullName,row.cadreType||"غير محدد",jobTitle,detail,centerId,employmentStatus,employmentStatus==="on_duty"?1:0)); added++; }
+      }
+      for (let i=0;i<statements.length;i+=35) await env.DB.batch(statements.slice(i,i+35));
+      await env.DB.prepare("INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,?,?,?,?)").bind(access.email,"import","staff",file.name,JSON.stringify({added,updated,skippedDeleted})).run();
+      return NextResponse.json({ok:true,added,updated,skippedDeleted,total:source.length});
+    } catch {
+      return NextResponse.json({ error: "تعذر قراءة ملف Excel. تأكدي من أن الملف غير تالف وأن عناوين الأعمدة صحيحة" }, { status: 400 });
+    }
+  }
   const b = (await request.json()) as Record<string, any>;
   if (b.entity === "deduplicateStaff") {
     const all = await env.DB.prepare("SELECT * FROM staff ORDER BY id").all();
@@ -184,21 +304,6 @@ export async function POST(request: NextRequest) {
       await env.DB.batch(statements);
     }
     return NextResponse.json({ ok: true, removed: duplicates.length, remaining: all.results.length - duplicates.length });
-  }
-  if (b.entity === "importStaffArchive") {
-    let added = 0;
-    const seen = new Set<string>();
-    for (const row of staffArchive as any[]) {
-      const name = employeeNameKey(row.fullName);
-      if (!name || seen.has(name)) continue;
-      seen.add(name);
-      const exists = await env.DB.prepare("SELECT id FROM staff WHERE lower(trim(full_name))=lower(trim(?)) LIMIT 1").bind(row.fullName).first();
-      if (exists) continue;
-      const detail = JSON.stringify({ station: row.station, startYear: row.startYear, gender: row.gender, birthYear: row.birthYear, category: row.category, emtLevel: row.emtLevel, medicalQualification: row.medicalQualification, ambulanceLicence: row.ambulanceLicence });
-      await env.DB.prepare("INSERT INTO staff (full_name,cadre_type,job_title,detail) VALUES (?,?,?,?)").bind(row.fullName, row.category || "غير محدد", row.emtLevel || "غير محدد", detail).run();
-      added++;
-    }
-    return NextResponse.json({ ok: true, added, total: staffArchive.length });
   }
   if (b.entity === "center")
     await env.DB.prepare("INSERT INTO centers (code,name,governorate) VALUES (?,?,?)")
@@ -232,11 +337,11 @@ export async function POST(request: NextRequest) {
       .run();
   }
   else if (b.entity === "staff")
-    await env.DB.prepare(
-      "INSERT INTO staff (full_name,cadre_type,job_title,detail,center_id,employment_status,active) VALUES (?,?,?,?,?,?,?)",
-    )
-      .bind(b.fullName, b.cadreType, b.jobTitle, b.detail || null, b.centerId ? Number(b.centerId) : null, b.employmentStatus || "on_duty", (b.employmentStatus || "on_duty") === "on_duty" ? 1 : 0)
-      .run();
+    await env.DB.batch([
+      env.DB.prepare("DELETE FROM deleted_staff_records WHERE normalized_name=?").bind(employeeNameKey(b.fullName)),
+      env.DB.prepare("INSERT INTO staff (full_name,cadre_type,job_title,detail,center_id,employment_status,active) VALUES (?,?,?,?,?,?,?)")
+        .bind(b.fullName, b.cadreType, b.jobTitle, b.detail || null, b.centerId ? Number(b.centerId) : null, b.employmentStatus || "on_duty", (b.employmentStatus || "on_duty") === "on_duty" ? 1 : 0),
+    ]);
   else if (b.entity === "setting")
     await env.DB.prepare(
       "INSERT INTO system_settings (key,value,label,category,updated_by) VALUES (?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP",
@@ -281,9 +386,15 @@ export async function DELETE(request: NextRequest) {
       await env.DB.prepare("DELETE FROM vehicles WHERE id=?").bind(id).run();
     } else if (entity === "staff") {
       if (!id) return NextResponse.json({ error: "الموظف غير محدد" }, { status: 400 });
+      const employee = await env.DB.prepare("SELECT full_name FROM staff WHERE id=?").bind(id).first<any>();
+      if (!employee) return NextResponse.json({ error: "الموظف غير موجود أو حُذف مسبقًا" }, { status: 404 });
       const used = await env.DB.prepare("SELECT 1 FROM operational_assignments WHERE staff_id=? UNION ALL SELECT 1 FROM vehicle_movements WHERE driver_staff_id=? UNION ALL SELECT 1 FROM fuel_fillings WHERE driver_staff_id=? OR filled_by_staff_id=? LIMIT 1").bind(id, id, id, id).first();
       if (used) return NextResponse.json({ error: "لا يمكن حذف الموظف لوجود سجلات تشغيلية مرتبطة به. غيّري حالته الوظيفية بدلًا من الحذف." }, { status: 409 });
-      await env.DB.prepare("DELETE FROM staff WHERE id=?").bind(id).run();
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM staff WHERE id=?").bind(id),
+        env.DB.prepare("INSERT INTO deleted_staff_records (normalized_name,full_name,deleted_by) VALUES (?,?,?) ON CONFLICT(normalized_name) DO UPDATE SET full_name=excluded.full_name,deleted_by=excluded.deleted_by,deleted_at=CURRENT_TIMESTAMP")
+          .bind(employeeNameKey(employee.full_name),employee.full_name,access.email),
+      ]);
     } else {
       return NextResponse.json({ error: "نوع الإعداد غير معروف" }, { status: 400 });
     }
