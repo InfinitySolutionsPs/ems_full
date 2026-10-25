@@ -1,22 +1,11 @@
 import { env } from "@/lib/server-env";
 import { NextRequest, NextResponse } from "next/server";
 import { getAccess,hasPermission } from "@/lib/access";
-import capacityArchive from "@/lib/capacity-archive.json";
 
 export async function GET(request: NextRequest) {
   const access=await getAccess(request);if(!hasPermission(access.profile,"capacity.view"))return NextResponse.json({error:"لا توجد صلاحية لعرض القدرة التشغيلية"},{status:403});
-  const staff = await env.DB.prepare("SELECT id,full_name FROM staff").all();
-  const stations = await env.DB.prepare("SELECT id,name FROM stations").all();
-  const key=(x:unknown)=>String(x||"").trim().replace(/\s+/g," ").replace(/ـ/g,"").toLowerCase();
-  const byName = new Map(staff.results.map((s:any)=>[key(s.full_name),Number(s.id)]));
-  const defaultStation=(stations.results as any[]).find(s=>key(s.name).includes("غزة"));
-  const statements:any[] = [];
-  for (const row of capacityArchive as any[]) {
-    const staffId = byName.get(key(row.name)); if (!staffId) continue;
-    const station=(stations.results as any[]).find(s=>key(s.name).includes(key(row.station))||key(row.station).includes(key(s.name).replace("محطة ","")))||defaultStation;if(!station)continue;
-    for (const shift of row.shifts||[]) statements.push(env.DB.prepare("INSERT INTO operational_assignments (work_date,staff_id,station_id,shift,duty_type,work_location,attendance_status,notes,created_by) SELECT ?,?,?,?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM operational_assignments WHERE work_date=? AND staff_id=? AND shift=?)").bind(row.date,staffId,station.id,shift,row.duty||"دوام مركز",row.station||null,"حاضر",row.detail||null,"archive",row.date,staffId,shift));
-  }
-  for (let i=0;i<statements.length;i+=40) await env.DB.batch(statements.slice(i,i+40));
+  // Archived assignments are imported explicitly during data migration. Loading
+  // the table must never recreate a row that an administrator has deleted.
   const date = request.nextUrl.searchParams.get("date");
   const from =
     request.nextUrl.searchParams.get("from") ||
@@ -82,9 +71,18 @@ export async function DELETE(request: NextRequest) {
   const id = request.nextUrl.searchParams.get("id");
   if (!id)
     return NextResponse.json({ error: "السجل غير محدد" }, { status: 400 });
-  await env.DB.prepare("DELETE FROM operational_assignments WHERE id=?")
-    .bind(id)
-    .run();
+  const assignment = await env.DB.prepare(
+    "SELECT id FROM operational_assignments WHERE id=?",
+  ).bind(id).first();
+  if (!assignment)
+    return NextResponse.json(
+      { error: "التكليف غير موجود أو حُذف مسبقًا" },
+      { status: 404 },
+    );
+  await env.DB.prepare("DELETE FROM operational_assignments WHERE id=?").bind(id).run();
+  await env.DB.prepare(
+    "INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,?,?,?,?)",
+  ).bind(access.email, "delete", "operational_assignment", id, "حذف تكليف من جدول القدرة التشغيلية").run();
   return NextResponse.json({ ok: true });
 }
 
