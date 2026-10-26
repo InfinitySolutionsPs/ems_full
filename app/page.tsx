@@ -1516,7 +1516,7 @@ function Records({
   canEditApproved: boolean;
 }) {
   const [search, setSearch] = useState("");
-  const [recordFilters, setRecordFilters] = useState({ station:"all", shift:"all", urgency:"all", quality:"all" });
+  const [recordFilters, setRecordFilters] = useState({ station:"all", shift:"all", urgency:"all", approval:"all" });
   const [recordPage, setRecordPage] = useState(1);
   const [recordPageSize, setRecordPageSize] = useState(10);
   const [selected, setSelected] = useState<any>(null);
@@ -1528,7 +1528,7 @@ function Records({
     (recordFilters.station === "all" || x.station === recordFilters.station) &&
     (recordFilters.shift === "all" || x.shift === recordFilters.shift) &&
     (recordFilters.urgency === "all" || x.urgency === recordFilters.urgency) &&
-    (recordFilters.quality === "all" || x.data_quality_status === recordFilters.quality)
+    (recordFilters.approval === "all" || x.approval_status === recordFilters.approval)
   );
   const recordPageCount = Math.max(1, Math.ceil(rows.length / recordPageSize));
   const activeRecordPage = Math.min(recordPage, recordPageCount);
@@ -1615,9 +1615,9 @@ function Records({
           <label>المحطة<select value={recordFilters.station} onChange={e=>{setRecordFilters({...recordFilters,station:e.target.value});setRecordPage(1)}}><option value="all">كل المحطات</option>{[...new Set(incidents.map(x=>String(x.station)))].filter(Boolean).map(x=><option key={x}>{x}</option>)}</select></label>
           <label>الوردية<select value={recordFilters.shift} onChange={e=>{setRecordFilters({...recordFilters,shift:e.target.value});setRecordPage(1)}}><option value="all">كل الورديات</option>{["A","B","C"].map(x=><option key={x}>{x}</option>)}</select></label>
           <label>الأولوية<select value={recordFilters.urgency} onChange={e=>{setRecordFilters({...recordFilters,urgency:e.target.value});setRecordPage(1)}}><option value="all">كل الأولويات</option>{["Red","Yellow","Green","N/A"].map(x=><option key={x} value={x}>{urgencyArabic[x]}</option>)}</select></label>
-          <label>حالة التدقيق<select value={recordFilters.quality} onChange={e=>{setRecordFilters({...recordFilters,quality:e.target.value});setRecordPage(1)}}><option value="all">جميع الحالات</option><option value="ok">سليم</option><option value="review">يحتاج مراجعة</option></select></label>
+          <label>حالة البلاغ<select value={recordFilters.approval} onChange={e=>{setRecordFilters({...recordFilters,approval:e.target.value});setRecordPage(1)}}><option value="all">جميع الحالات</option><option value="approved">معتمد</option><option value="draft">مسودة</option></select></label>
         </div>
-        <div className="record-filter-actions"><button className="ghost" onClick={()=>{setRecordFilters({station:"all",shift:"all",urgency:"all",quality:"all"});setFilters({from:monthStart,to:today,governorate:"all",category:"all"});setSearch("");setRecordPage(1)}}><RefreshCw /> إعادة ضبط الفلاتر</button></div>
+        <div className="record-filter-actions"><button className="ghost" onClick={()=>{setRecordFilters({station:"all",shift:"all",urgency:"all",approval:"all"});setFilters({from:monthStart,to:today,governorate:"all",category:"all"});setSearch("");setRecordPage(1)}}><RefreshCw /> إعادة ضبط الفلاتر</button></div>
       </section>
       <section className="panel table-panel">
         <PanelTitle
@@ -1639,7 +1639,6 @@ function Records({
                 <th>المحطة</th>
                 <th>مدخل البلاغ</th>
                 <th>الاستجابة</th>
-                <th>التدقيق</th>
                 <th>التفاصيل</th>
               </tr>
             </thead>
@@ -1664,7 +1663,6 @@ function Records({
                   <td>{String(x.station)}</td>
                   <td>{String(x.created_by || "—")}</td>
                   <td>{String(x.response_minutes || 0)} دقيقة</td>
-                  <td><span className={`quality-badge ${x.data_quality_status === "review" ? "review" : "ok"}`}>{x.data_quality_status === "review" ? "يحتاج مراجعة" : "سليم"}</span></td>
                   <td>
                     <button
                       className="table-icon-action"
@@ -1677,7 +1675,7 @@ function Records({
               ))}
               {!rows.length && !loading && (
                 <tr>
-                  <td colSpan={12}>
+                  <td colSpan={11}>
                     <Empty />
                   </td>
                 </tr>
