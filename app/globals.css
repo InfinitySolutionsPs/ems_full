@@ -1206,6 +1206,11 @@ tbody tr:hover {
 .staff-pagination nav button { min-width:36px; height:36px; border:1px solid #dfe4ec; border-radius:9px; background:#fff; color:#4e5868; padding:0 10px; font:inherit; font-weight:800; cursor:pointer; }
 .staff-pagination nav button.active { border-color:#c91431; background:#c91431; color:#fff; }
 .staff-pagination nav button:disabled { opacity:.4; cursor:not-allowed; }
+.record-pagination { padding:18px; border-top:1px solid #edf0f3; }
+.record-pagination>strong { color:#303847; font-size:13px; }
+.approval-status-badge { display:inline-flex; align-items:center; justify-content:center; min-width:68px; padding:6px 11px; border-radius:999px; font-size:12px; font-weight:900; }
+.approval-status-badge.approved { background:#e4f7ec; color:#167044; }
+.approval-status-badge.draft { background:#fff2d6; color:#91610c; }
 .staff-detail-modal { width:min(920px,calc(100vw - 32px)); max-height:90vh; overflow:auto; }
 .staff-detail-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
 .staff-detail-grid article { min-width:0; min-height:78px; padding:14px 16px; border:1px solid #e4e7ec; border-radius:13px; background:#fafbfc; display:flex; flex-direction:column; gap:7px; }

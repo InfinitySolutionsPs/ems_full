@@ -26,6 +26,23 @@ async function nextIncidentCode() {
   return row.code;
 }
 
+async function stationInUserCenter(profile: { role:string; station:string|null }, station: unknown, allowCenterPlaceholder=false) {
+  if (profile.role !== "station_user") return true;
+  const scope = String(profile.station || "").trim();
+  const requested = String(station || "").trim();
+  if (!scope || !requested) return false;
+  if (allowCenterPlaceholder && requested === scope) return true;
+  const match = await env.DB.prepare(
+    `SELECT s.id FROM stations s
+     LEFT JOIN centers c ON c.id=s.center_id
+     WHERE s.name=? AND (
+       c.name=? OR s.name=? OR
+       s.center_id=(SELECT own.center_id FROM stations own WHERE own.name=? LIMIT 1)
+     ) LIMIT 1`,
+  ).bind(requested, scope, scope, scope).first();
+  return Boolean(match);
+}
+
 export async function GET(request: NextRequest) {
   const access = await getAccess(request);
   const url = new URL(request.url);
@@ -60,8 +77,14 @@ export async function GET(request: NextRequest) {
     args.push(category);
   }
   if (access.profile?.role === "station_user") {
-    sql += " AND (station = ? OR station IN (SELECT member.name FROM stations member WHERE member.center_id=(SELECT own.center_id FROM stations own WHERE own.name=? LIMIT 1)))";
-    args.push(access.profile.station, access.profile.station);
+    const scope = String(access.profile.station || "").trim();
+    if (!scope) return NextResponse.json({ incidents: [] }, { headers: { "Cache-Control": "no-store, max-age=0" } });
+    sql += ` AND (station=? OR station IN (
+      SELECT member.name FROM stations member
+      LEFT JOIN centers center ON center.id=member.center_id
+      WHERE center.name=? OR member.center_id=(SELECT own.center_id FROM stations own WHERE own.name=? LIMIT 1)
+    ))`;
+    args.push(scope, scope, scope);
   }
   sql += " ORDER BY call_date DESC, call_time DESC LIMIT 1000";
   try {
@@ -94,9 +117,9 @@ export async function POST(request: NextRequest) {
       { status: 403 },
     );
   if (access.profile?.role === "station_user") {
-    if (body.station && body.station !== access.profile.station)
-      return NextResponse.json({ error: "يمكنك الإدخال للمحطة المحددة في حسابك فقط" }, { status: 403 });
-    body.station = access.profile.station || "";
+    if (isDraft && !clean(body.station)) body.station = access.profile.station || "";
+    if (!(await stationInUserCenter(access.profile, body.station, isDraft)))
+      return NextResponse.json({ error: "يمكنك الإدخال لمحطات المركز المحدد في حسابك فقط" }, { status: 403 });
   }
   const incidentStatus = String(body.incidentStatus || "completed");
   if (!["cancelled_before_dispatch", "cancelled_after_dispatch", "completed"].includes(incidentStatus))
@@ -227,9 +250,9 @@ export async function PATCH(request: NextRequest) {
   if (current.approval_status === "approved" ? !canEditApproved : !(ownsDraft || canEditOther))
     return NextResponse.json({ error: "البلاغ المعتمد مقفل، وتعديله يحتاج صلاحية خاصة" }, { status: 403 });
   if (access.profile.role === "station_user") {
-    if ((current.station && current.station !== access.profile.station) || (body.station && body.station !== access.profile.station))
-      return NextResponse.json({ error: "يمكنك تعديل بلاغات محطتك فقط" }, { status: 403 });
-    body.station = access.profile.station || "";
+    if (submissionAction === "draft" && !clean(body.station)) body.station = current.station || access.profile.station || "";
+    if (!(await stationInUserCenter(access.profile, current.station, true)) || !(await stationInUserCenter(access.profile, body.station, submissionAction === "draft")))
+      return NextResponse.json({ error: "يمكنك تعديل بلاغات المركز المحدد في حسابك فقط" }, { status: 403 });
   }
   const responseMinutes = minutesBetweenDates(body.callDate, body.dispatchTime || body.callTime, body.callDate, body.arrivalTime);
   const serviceMinutes = minutesBetweenDates(body.callDate, body.callTime, body.callDate, body.clearTime);
