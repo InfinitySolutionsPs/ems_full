@@ -638,7 +638,7 @@ export default function HomePage() {
             settingsData={settingsData}
           />
         )}{" "}
-        {view === "users" && <UsersView users={users} reload={loadAux} />}{" "}
+        {view === "users" && <UsersView users={users} centers={settingsData.centers} reload={loadAux} />}{" "}
         {view === "settings" && (
           <SettingsView2 data={settingsData} reload={loadAux} />
         )}
@@ -1517,6 +1517,8 @@ function Records({
 }) {
   const [search, setSearch] = useState("");
   const [recordFilters, setRecordFilters] = useState({ station:"all", shift:"all", urgency:"all", quality:"all" });
+  const [recordPage, setRecordPage] = useState(1);
+  const [recordPageSize, setRecordPageSize] = useState(10);
   const [selected, setSelected] = useState<any>(null);
   const [incidentDraft, setIncidentDraft] = useState<any>({});
   const [editing, setEditing] = useState(false);
@@ -1528,6 +1530,9 @@ function Records({
     (recordFilters.urgency === "all" || x.urgency === recordFilters.urgency) &&
     (recordFilters.quality === "all" || x.data_quality_status === recordFilters.quality)
   );
+  const recordPageCount = Math.max(1, Math.ceil(rows.length / recordPageSize));
+  const activeRecordPage = Math.min(recordPage, recordPageCount);
+  const paginatedRows = rows.slice((activeRecordPage - 1) * recordPageSize, activeRecordPage * recordPageSize);
   const openIncident = (x: any) => {
     setSelected(x);
     setIncidentDraft({
@@ -1593,7 +1598,7 @@ function Records({
           <input
             placeholder="ابحث برقم البلاغ أو المستفيد أو المحطة"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setRecordPage(1); }}
           />
         </div>
         <button className="ghost" onClick={onRefresh}>
@@ -1603,28 +1608,29 @@ function Records({
       <section className="record-filter-bar panel" dir="rtl">
         <div className="filter-title"><span className="filter-mark"><SlidersHorizontal /></span><span><b>فلاتر سجل البلاغات</b><small>حدد الفترة والتصنيف ونطاق العمل</small></span><span className="filter-count">{rows.length} نتيجة</span></div>
         <div className="record-filter-fields">
-          <label>من تاريخ<input type="date" value={filters.from} max={filters.to} onChange={e=>setFilters(v=>({...v,from:e.target.value}))}/></label>
-          <label>إلى تاريخ<input type="date" value={filters.to} min={filters.from} onChange={e=>setFilters(v=>({...v,to:e.target.value}))}/></label>
-          <label>المحافظة<select value={filters.governorate} onChange={e=>setFilters(v=>({...v,governorate:e.target.value}))}><option value="all">كل المحافظات</option>{governors.map(x=><option key={x}>{x}</option>)}</select></label>
-          <label>التصنيف<select value={filters.category} onChange={e=>setFilters(v=>({...v,category:e.target.value}))}><option value="all">كل التصنيفات</option>{categories.map(x=><option key={x} value={x}>{categoryArabic[x]}</option>)}</select></label>
-          <label>المحطة<select value={recordFilters.station} onChange={e=>setRecordFilters({...recordFilters,station:e.target.value})}><option value="all">كل المحطات</option>{[...new Set(incidents.map(x=>String(x.station)))].filter(Boolean).map(x=><option key={x}>{x}</option>)}</select></label>
-          <label>الوردية<select value={recordFilters.shift} onChange={e=>setRecordFilters({...recordFilters,shift:e.target.value})}><option value="all">كل الورديات</option>{["A","B","C"].map(x=><option key={x}>{x}</option>)}</select></label>
-          <label>الأولوية<select value={recordFilters.urgency} onChange={e=>setRecordFilters({...recordFilters,urgency:e.target.value})}><option value="all">كل الأولويات</option>{["Red","Yellow","Green","N/A"].map(x=><option key={x} value={x}>{urgencyArabic[x]}</option>)}</select></label>
-          <label>حالة التدقيق<select value={recordFilters.quality} onChange={e=>setRecordFilters({...recordFilters,quality:e.target.value})}><option value="all">جميع الحالات</option><option value="ok">سليم</option><option value="review">يحتاج مراجعة</option></select></label>
+          <label>من تاريخ<input type="date" value={filters.from} max={filters.to} onChange={e=>{setFilters(v=>({...v,from:e.target.value}));setRecordPage(1)}}/></label>
+          <label>إلى تاريخ<input type="date" value={filters.to} min={filters.from} onChange={e=>{setFilters(v=>({...v,to:e.target.value}));setRecordPage(1)}}/></label>
+          <label>المحافظة<select value={filters.governorate} onChange={e=>{setFilters(v=>({...v,governorate:e.target.value}));setRecordPage(1)}}><option value="all">كل المحافظات</option>{governors.map(x=><option key={x}>{x}</option>)}</select></label>
+          <label>التصنيف<select value={filters.category} onChange={e=>{setFilters(v=>({...v,category:e.target.value}));setRecordPage(1)}}><option value="all">كل التصنيفات</option>{categories.map(x=><option key={x} value={x}>{categoryArabic[x]}</option>)}</select></label>
+          <label>المحطة<select value={recordFilters.station} onChange={e=>{setRecordFilters({...recordFilters,station:e.target.value});setRecordPage(1)}}><option value="all">كل المحطات</option>{[...new Set(incidents.map(x=>String(x.station)))].filter(Boolean).map(x=><option key={x}>{x}</option>)}</select></label>
+          <label>الوردية<select value={recordFilters.shift} onChange={e=>{setRecordFilters({...recordFilters,shift:e.target.value});setRecordPage(1)}}><option value="all">كل الورديات</option>{["A","B","C"].map(x=><option key={x}>{x}</option>)}</select></label>
+          <label>الأولوية<select value={recordFilters.urgency} onChange={e=>{setRecordFilters({...recordFilters,urgency:e.target.value});setRecordPage(1)}}><option value="all">كل الأولويات</option>{["Red","Yellow","Green","N/A"].map(x=><option key={x} value={x}>{urgencyArabic[x]}</option>)}</select></label>
+          <label>حالة التدقيق<select value={recordFilters.quality} onChange={e=>{setRecordFilters({...recordFilters,quality:e.target.value});setRecordPage(1)}}><option value="all">جميع الحالات</option><option value="ok">سليم</option><option value="review">يحتاج مراجعة</option></select></label>
         </div>
-        <div className="record-filter-actions"><button className="ghost" onClick={()=>{setRecordFilters({station:"all",shift:"all",urgency:"all",quality:"all"});setFilters({from:monthStart,to:today,governorate:"all",category:"all"});setSearch("")}}><RefreshCw /> إعادة ضبط الفلاتر</button></div>
+        <div className="record-filter-actions"><button className="ghost" onClick={()=>{setRecordFilters({station:"all",shift:"all",urgency:"all",quality:"all"});setFilters({from:monthStart,to:today,governorate:"all",category:"all"});setSearch("");setRecordPage(1)}}><RefreshCw /> إعادة ضبط الفلاتر</button></div>
       </section>
       <section className="panel table-panel">
         <PanelTitle
           icon={ClipboardList}
           title="البلاغات المسجلة"
-          subtitle={`${rows.length} بلاغًا ضمن الفلاتر الحالية`}
+          subtitle={`${rows.length} حالة ضمن الفلاتر الحالية — من أصل ${incidents.length} حالة`}
         />
         <div className="table-wrap">
           <table>
             <thead>
               <tr>
                 <th>رقم البلاغ</th>
+                <th>حالة البلاغ</th>
                 <th>التاريخ</th>
                 <th>المستفيد</th>
                 <th>الحالة</th>
@@ -1638,11 +1644,12 @@ function Records({
               </tr>
             </thead>
             <tbody>
-              {rows.map((x) => (
+              {paginatedRows.map((x) => (
                 <tr key={String(x.id)}>
                   <td>
                     <b>{String(x.incident_number)}</b>
                   </td>
+                  <td><span className={`approval-status-badge ${x.approval_status === "draft" ? "draft" : "approved"}`}>{x.approval_status === "draft" ? "مسودة" : "معتمد"}</span></td>
                   <td>{String(x.call_date)}</td>
                   <td>{String(x.beneficiary_name || "—")}</td>
                   <td>{String(x.case_type)}</td>
@@ -1670,13 +1677,19 @@ function Records({
               ))}
               {!rows.length && !loading && (
                 <tr>
-                  <td colSpan={11}>
+                  <td colSpan={12}>
                     <Empty />
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+          {rows.length > 0 && <div className="staff-pagination record-pagination">
+            <span>عرض {(activeRecordPage-1)*recordPageSize+1}–{Math.min(activeRecordPage*recordPageSize,rows.length)} من {rows.length} حالة</span>
+            <strong>الصفحة {activeRecordPage} من {recordPageCount}</strong>
+            <label>عدد الصفوف<select value={recordPageSize} onChange={event=>{setRecordPageSize(Number(event.target.value));setRecordPage(1)}}>{[10,25,50,100].map(size=><option key={size} value={size}>{size}</option>)}</select></label>
+            <nav aria-label="صفحات سجل البلاغات"><button type="button" disabled={activeRecordPage===1} onClick={()=>setRecordPage(page=>Math.max(1,page-1))}>السابق</button>{Array.from({length:recordPageCount},(_,index)=>index+1).filter(page=>page===1||page===recordPageCount||Math.abs(page-activeRecordPage)<=2).map((page,index,pages)=><span key={page}>{index>0&&page-pages[index-1]>1&&<i>…</i>}<button type="button" className={page===activeRecordPage?"active":""} onClick={()=>setRecordPage(page)}>{page}</button></span>)}<button type="button" disabled={activeRecordPage===recordPageCount} onClick={()=>setRecordPage(page=>Math.min(recordPageCount,page+1))}>التالي</button></nav>
+          </div>}
         </div>
       </section>
       {selected && (
@@ -2219,7 +2232,7 @@ function Approvals({
   );
 }
 
-function UsersView({ users, reload }: { users: any[]; reload: () => void }) {
+function UsersView({ users, centers, reload }: { users: any[]; centers: any[]; reload: () => void }) {
   const permissionGroups = [
     {title:"الرئيسية والتقارير",icon:BarChart3,items:[["dashboard.view","عرض لوحة المؤشرات والقوى العاملة"],["reports.view","عرض التقارير الدورية والمخصصة وتصدير Excel وPDF"]]},
     {title:"سجل البلاغات",icon:ClipboardList,items:[["incidents.view","عرض سجل بلاغات نطاق العمل"],["incidents.create","تسجيل بلاغ وحفظه كمسودة أو اعتماده وإضافة مستفيدين"],["incidents.edit","تعديل المسودات والبلاغات غير المعتمدة"],["incidents.edit_approved","تعديل البلاغات المعتمدة والمقفلة"],["incidents.delete","حذف البلاغات نهائيًا"]]},
@@ -2292,7 +2305,7 @@ function UsersView({ users, reload }: { users: any[]; reload: () => void }) {
   const roleLabel: Record<string, string> = {
     admin: "مدير النظام",
     central_user: "موظف مركزي",
-    station_user: "مدخل محطة",
+    station_user: "موظف مركز",
     viewer: "مشاهد تقارير",
   };
   return (
@@ -2334,9 +2347,9 @@ function UsersView({ users, reload }: { users: any[]; reload: () => void }) {
             <label>{editingId?"كلمة مرور جديدة":"كلمة المرور"} <em>{editingId?"اختياري":"8 أحرف على الأقل"}</em><input required={!editingId} minLength={8} type="password" placeholder={editingId?"اتركها فارغة دون تغيير":"••••••••"} value={draft.password} onChange={(e)=>setDraft({...draft,password:e.target.value})}/></label>
           </div></section>
           <section className="user-editor-section"><div className="user-section-title"><span>2</span><div><b>الدور ونطاق الوصول</b><small>اختيار الدور يطبق مجموعة صلاحيات مقترحة ويمكن تعديلها</small></div></div><div className="user-fields-grid access-grid">
-            <label>الدور الوظيفي<select value={draft.role} onChange={(e)=>{const role=e.target.value;setDraft({...draft,role,permissions:rolePresets[role]||[]})}}><option value="custom">صلاحيات مخصصة</option><option value="station_user">مدخل محطة</option><option value="central_user">موظف مركزي</option><option value="viewer">مشاهد تقارير</option><option value="admin">مدير النظام</option></select></label>
-            <label>نطاق المحطة<select value={draft.station} onChange={(e)=>setDraft({...draft,station:e.target.value})}><option value="">كل المحطات</option>{stations.map((x)=><option key={x}>{x}</option>)}</select></label>
-            <div className="access-summary"><ShieldCheck/><div><b>{draft.role==="admin"?"صلاحية كاملة":`${draft.permissions.filter((p:string)=>p!=="*").length} صلاحيات محددة`}</b><span>{draft.station||"الوصول إلى جميع المحطات"}</span></div></div>
+            <label>الدور الوظيفي<select value={draft.role} onChange={(e)=>{const role=e.target.value;setDraft({...draft,role,permissions:rolePresets[role]||[]})}}><option value="custom">صلاحيات مخصصة</option><option value="station_user">موظف مركز</option><option value="central_user">موظف مركزي</option><option value="viewer">مشاهد تقارير</option><option value="admin">مدير النظام</option></select></label>
+            <label>نطاق المركز<select value={draft.station} onChange={(e)=>setDraft({...draft,station:e.target.value})}><option value="">كل المراكز</option>{draft.station && !(centers||[]).some((x:any)=>x.name===draft.station) && <option value={draft.station}>{draft.station} — نطاق سابق</option>}{(centers||[]).map((x:any)=><option key={x.id} value={x.name}>{x.name}</option>)}</select></label>
+            <div className="access-summary"><ShieldCheck/><div><b>{draft.role==="admin"?"صلاحية كاملة":`${draft.permissions.filter((p:string)=>p!=="*").length} صلاحيات محددة`}</b><span>{draft.station||"الوصول إلى جميع المراكز"}</span></div></div>
           </div></section>
           <section className="user-editor-section permission-section"><div className="permission-head"><div className="user-section-title"><span>3</span><div><b>صلاحيات الواجهات والإجراءات</b><small>حدد ما يمكن للمستخدم مشاهدته أو إدارته</small></div></div><div className="permission-actions"><button type="button" onClick={()=>setDraft({...draft,role:"custom",permissions:allPermissions})}>تحديد الكل</button><button type="button" onClick={()=>setDraft({...draft,role:"custom",permissions:[]})}>إلغاء الكل</button></div></div>
             <div className="permission-groups">{permissionGroups.map(group=><fieldset className="permission-group" key={group.title}><legend><group.icon/>{group.title}</legend>{group.items.map(([code,label])=><label key={code} className={draft.permissions.includes("*")||draft.permissions.includes(code)?"selected":""}><input type="checkbox" disabled={draft.permissions.includes("*")} checked={draft.permissions.includes("*")||draft.permissions.includes(code)} onChange={(e)=>setDraft({...draft,role:"custom",permissions:e.target.checked?[...draft.permissions.filter((p:string)=>p!=="*"),code]:draft.permissions.filter((p:string)=>p!==code&&p!=="*")})}/><span>{label}</span><i/></label>)}</fieldset>)}</div>
@@ -2374,7 +2387,7 @@ function UsersView({ users, reload }: { users: any[]; reload: () => void }) {
                       {roleLabel[u.role] || u.role}
                     </span>
                   </td>
-                  <td>{u.station || "جميع المحطات"}</td>
+                  <td>{u.station || "جميع المراكز"}</td>
                   <td>
                     <span className={u.active ? "state active" : "state"}>
                       {u.active ? "نشط" : "موقوف"}
@@ -2413,7 +2426,7 @@ function UsersView({ users, reload }: { users: any[]; reload: () => void }) {
           {[
             ["مدير النظام", "✓", "✓", "✓", "✓"],
             ["موظف مركزي", "✓", "—", "✓", "—"],
-            ["مدخل محطة", "✓", "—", "محطته", "—"],
+            ["موظف مركز", "✓", "—", "مركزه", "—"],
             ["مشاهد تقارير", "—", "—", "✓", "—"],
           ].flatMap((r, i) =>
             r.map((c, j) => (
