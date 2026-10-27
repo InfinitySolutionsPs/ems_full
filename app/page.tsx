@@ -611,6 +611,9 @@ export default function HomePage() {
             onRefresh={refresh}
             filters={filters}
             setFilters={setFilters}
+            centers={settingsData.centers}
+            stationsData={settingsData.stations}
+            vehicles={settingsData.vehicles}
             isAdmin={currentRole === "admin"}
             currentUser={currentUser}
             canEdit={can("incidents.edit")}
@@ -1500,6 +1503,9 @@ function Records({
   onRefresh,
   filters,
   setFilters,
+  centers,
+  stationsData,
+  vehicles,
   isAdmin,
   currentUser,
   canEdit,
@@ -1510,6 +1516,9 @@ function Records({
   onRefresh: () => void;
   filters: {from:string;to:string;governorate:string;category:string};
   setFilters: React.Dispatch<React.SetStateAction<{from:string;to:string;governorate:string;category:string}>>;
+  centers: any[];
+  stationsData: any[];
+  vehicles: any[];
   isAdmin: boolean;
   currentUser: any;
   canEdit: boolean;
@@ -1533,7 +1542,15 @@ function Records({
   const recordPageCount = Math.max(1, Math.ceil(rows.length / recordPageSize));
   const activeRecordPage = Math.min(recordPage, recordPageCount);
   const paginatedRows = rows.slice((activeRecordPage - 1) * recordPageSize, activeRecordPage * recordPageSize);
+  const editCenterId = String(incidentDraft.center || "");
+  const editStations = (stationsData || []).filter((station:any) => String(station.center_id) === editCenterId);
+  const editVehicles = (vehicles || []).filter((vehicle:any) =>
+    String(vehicle.center_id) === editCenterId &&
+    (vehicle.active !== 0 || vehicle.plate_number === incidentDraft.vehicle)
+  );
   const openIncident = (x: any) => {
+    const incidentStation = (stationsData || []).find((station:any) => station.name === x.station);
+    const incidentVehicle = (vehicles || []).find((vehicle:any) => vehicle.plate_number === x.vehicle);
     setSelected(x);
     setIncidentDraft({
       id: x.id,
@@ -1553,6 +1570,7 @@ function Records({
       pickupNeighborhood: x.pickup_neighborhood || "",
       dropoffType: x.dropoff_type || "",
       dropoffLocation: x.dropoff_location || "",
+      center: String(incidentStation?.center_id || incidentVehicle?.center_id || ""),
       station: x.station || "",
       shift: x.shift || "A",
       vehicle: x.vehicle || "",
@@ -1706,6 +1724,56 @@ function Records({
               </button>
             </div>
             <div className="incident-detail-grid">
+              <label>
+                المركز
+                <select
+                  disabled={!editing}
+                  value={editCenterId}
+                  onChange={(e) => setIncidentDraft({
+                    ...incidentDraft,
+                    center: e.target.value,
+                    station: "",
+                    vehicle: "",
+                    kmStart: "",
+                  })}
+                >
+                  <option value="">اختر المركز...</option>
+                  {(centers || []).map((center:any) => <option key={center.id} value={center.id}>{center.name}</option>)}
+                </select>
+              </label>
+              <label>
+                المحطة
+                <select
+                  disabled={!editing || !editCenterId}
+                  value={incidentDraft.station || ""}
+                  onChange={(e) => setIncidentDraft({ ...incidentDraft, station: e.target.value })}
+                >
+                  <option value="">{editCenterId ? "اختر المحطة..." : "اختر المركز أولًا"}</option>
+                  {editStations.map((station:any) => <option key={station.id} value={station.name}>{station.name}</option>)}
+                </select>
+              </label>
+              <label>
+                المركبة
+                <select
+                  disabled={!editing || !editCenterId}
+                  value={incidentDraft.vehicle || ""}
+                  onChange={(e) => {
+                    const vehicle = editVehicles.find((item:any) => item.plate_number === e.target.value);
+                    setIncidentDraft({
+                      ...incidentDraft,
+                      vehicle: e.target.value,
+                      kmStart: vehicle ? String(Number(vehicle.mileage_km || 0)) : "",
+                    });
+                  }}
+                >
+                  <option value="">{editCenterId ? "اختر المركبة..." : "اختر المركز أولًا"}</option>
+                  {editVehicles.map((vehicle:any) => (
+                    <option key={vehicle.id} value={vehicle.plate_number}>
+                      {vehicle.plate_number}{vehicle.active === 0 ? " — خارج الخدمة" : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
               {[
                 ["beneficiaryName", "اسم المستفيد", "text"],
                 ["contact", "رقم التواصل", "text"],
@@ -1746,9 +1814,7 @@ function Records({
                   "select",
                   governors.map((x) => [x, x]),
                 ],
-                ["station", "المحطة", "select", stations.map((x) => [x, x])],
                 ["shift", "الوردية", "select", ["A","B","C"].map((x) => [x, x])],
-                ["vehicle", "المركبة", "text"],
                 ["callDate", "التاريخ", "date"],
                 ["entryTime", "وقت إدخال البلاغ", "time"],
                 ["callTime", "وقت استلام البلاغ", "time"],
