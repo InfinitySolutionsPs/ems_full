@@ -95,6 +95,12 @@ CREATE TABLE IF NOT EXISTS fuel_fillings (id BIGSERIAL PRIMARY KEY, vehicle_id B
 CREATE TABLE IF NOT EXISTS vehicle_movements (id BIGSERIAL PRIMARY KEY, vehicle_id BIGINT NOT NULL REFERENCES vehicles(id), incident_id BIGINT REFERENCES incidents(id), driver_staff_id BIGINT REFERENCES staff(id), driver_name TEXT, departed_at TEXT NOT NULL, returned_at TEXT, km_start DOUBLE PRECISION NOT NULL, km_end DOUBLE PRECISION, destination TEXT, notes TEXT, created_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_vehicle_movements_incident ON vehicle_movements(incident_id) WHERE incident_id IS NOT NULL;
 CREATE TABLE IF NOT EXISTS vehicle_maintenance (id BIGSERIAL PRIMARY KEY, vehicle_id BIGINT NOT NULL REFERENCES vehicles(id), station_id BIGINT NOT NULL REFERENCES stations(id), request_date TEXT NOT NULL, department TEXT NOT NULL, odometer_km DOUBLE PRECISION NOT NULL, requested_repair TEXT NOT NULL, failure_cause TEXT, driver_name TEXT NOT NULL, center_manager_name TEXT, circle_manager_name TEXT, attachment_key TEXT NOT NULL, attachment_name TEXT NOT NULL, attachment_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'open', maintenance_recommendation TEXT, manager_recommendation TEXT, finance_recommendation TEXT, administrative_recommendation TEXT, performed_work TEXT, received_at TEXT, received_by TEXT, created_by TEXT NOT NULL, closed_by TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+ALTER TABLE vehicle_maintenance ADD COLUMN IF NOT EXISTS repair_cost_ils DOUBLE PRECISION;
+ALTER TABLE vehicle_maintenance ADD COLUMN IF NOT EXISTS workshop_name TEXT;
+ALTER TABLE vehicle_maintenance ADD COLUMN IF NOT EXISTS workshop_address TEXT;
+ALTER TABLE vehicle_maintenance ADD COLUMN IF NOT EXISTS invoice_key TEXT;
+ALTER TABLE vehicle_maintenance ADD COLUMN IF NOT EXISTS invoice_name TEXT;
+ALTER TABLE vehicle_maintenance ADD COLUMN IF NOT EXISTS invoice_type TEXT;
 CREATE TABLE IF NOT EXISTS audit_logs (id BIGSERIAL PRIMARY KEY, actor TEXT, action TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT, details TEXT, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
 ALTER TABLE audit_logs ADD COLUMN IF NOT EXISTS actor_user_id BIGINT REFERENCES user_profiles(id);
 CREATE INDEX IF NOT EXISTS idx_audit_logs_entity_created ON audit_logs(entity_type, created_at DESC);

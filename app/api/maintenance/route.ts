@@ -16,17 +16,22 @@ export async function GET(request: NextRequest) {
   const access = await accessFor(request);
   if (!access || !hasPermission(access.profile,"maintenance.view")) return error("لا توجد صلاحية لعرض الصيانة", 403);
   const query = new URL(request.url).searchParams;
-  const attachmentId = Number(query.get("attachment"));
-  if (query.has("attachment")) {
+  const fileKind = query.has("invoice") ? "invoice" : "attachment";
+  const attachmentId = Number(query.get(fileKind));
+  if (query.has(fileKind)) {
     if (!Number.isInteger(attachmentId) || attachmentId < 1) return error("رقم الطلب غير صالح");
-    const row = await env.DB.prepare("SELECT m.attachment_key,m.attachment_name,m.attachment_type,s.name station_name FROM vehicle_maintenance m JOIN stations s ON s.id=m.station_id WHERE m.id=?").bind(attachmentId).first<any>();
+    const row = await env.DB.prepare(`SELECT m.attachment_key,m.attachment_name,m.attachment_type,m.invoice_key,m.invoice_name,m.invoice_type,s.name station_name FROM vehicle_maintenance m JOIN stations s ON s.id=m.station_id WHERE m.id=?`).bind(attachmentId).first<any>();
     if (!row) return error("المرفق غير موجود", 404);
     if (access.profile?.role === "station_user" && row.station_name !== access.profile.station) return error("خارج نطاق المحطة", 403);
-    const object = await bucket().get(row.attachment_key);
+    const key = fileKind === "invoice" ? row.invoice_key : row.attachment_key;
+    const name = fileKind === "invoice" ? row.invoice_name : row.attachment_name;
+    const type = fileKind === "invoice" ? row.invoice_type : row.attachment_type;
+    if (!key) return error(fileKind === "invoice" ? "لم تُرفق فاتورة لهذا الطلب" : "المرفق غير موجود", 404);
+    const object = await bucket().get(key);
     if (!object) return error("ملف الطلب غير متاح", 404);
-    const filename = encodeURIComponent(String(row.attachment_name).replace(/[\r\n]/g, ""));
+    const filename = encodeURIComponent(String(name).replace(/[\r\n]/g, ""));
     return new Response(new Uint8Array(object.body), { headers: {
-      "Content-Type": row.attachment_type,
+      "Content-Type": type,
       "Content-Disposition": `inline; filename*=UTF-8''${filename}`,
       "Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff",
     } });
@@ -46,7 +51,7 @@ export async function GET(request: NextRequest) {
       ORDER BY m.request_date DESC,m.id DESC LIMIT 2000`).bind(from,to,vehicleId,vehicleId,stationId,stationId),
   ]);
   const scoped = (rows: any[]) => access.profile?.role === "station_user" ? rows.filter((x) => x.station_name === access.profile?.station || x.name === access.profile?.station) : rows;
-  return NextResponse.json({ vehicles: scoped(vehicles.results), stations: access.profile?.role === "station_user" ? stations.results.filter((s: any) => s.name === access.profile?.station) : stations.results, requests: scoped(requests.results).map(({ attachment_key, ...row }: any) => row), canClose: hasPermission(access.profile,"maintenance.manage") });
+  return NextResponse.json({ vehicles: scoped(vehicles.results), stations: access.profile?.role === "station_user" ? stations.results.filter((s: any) => s.name === access.profile?.station) : stations.results, requests: scoped(requests.results).map(({ attachment_key, invoice_key, ...row }: any) => row), canClose: hasPermission(access.profile,"maintenance.manage"), canDelete: hasPermission(access.profile,"maintenance.manage") });
 }
 
 export async function POST(request: NextRequest) {
@@ -99,21 +104,58 @@ export async function POST(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const access = await accessFor(request);
   if (!access || !hasPermission(access.profile,"maintenance.manage")) return error("إغلاق طلب الصيانة غير مسموح", 403);
-  const body = await request.json() as Record<string, unknown>;
-  const id = Number(body.id);
-  const performed = typeof body.performedWork === "string" ? body.performedWork.trim() : "";
-  const receiver = typeof body.receivedBy === "string" ? body.receivedBy.trim() : "";
-  const receivedAt = typeof body.receivedAt === "string" ? body.receivedAt.trim() : "";
-  if (!Number.isInteger(id) || id < 1 || !performed || !receiver || !date(receivedAt)) return error("حدد الإصلاح المنفذ وتاريخ الاستلام واسم المستلم");
-  const current = await env.DB.prepare("SELECT vehicle_id,status FROM vehicle_maintenance WHERE id=?").bind(id).first<any>();
+  const form = await request.formData();
+  const id = Number(str(form.get("id")));
+  const performed = str(form.get("performedWork"));
+  const receiver = str(form.get("receivedBy"));
+  const receivedAt = str(form.get("receivedAt"));
+  const workshopName = str(form.get("workshopName"));
+  const workshopAddress = str(form.get("workshopAddress"));
+  const repairCost = Number(str(form.get("repairCostIls")));
+  const invoice = form.get("invoice");
+  if (!Number.isInteger(id) || id < 1 || !performed || !receiver || !date(receivedAt) || !workshopName || !workshopAddress || !Number.isFinite(repairCost) || repairCost < 0) return error("أكملي إجراءات الصيانة والتكلفة وبيانات الورشة والاستلام");
+  if (!(invoice instanceof File) || !invoice.size || invoice.size > 10 * 1024 * 1024 || !["application/pdf", "image/jpeg", "image/png"].includes(invoice.type)) return error("أرفقي فاتورة بصيغة PDF أو صورة JPG/PNG وبحجم لا يتجاوز 10 ميغابايت");
+  const invoiceBytes = await invoice.arrayBuffer();
+  const invoiceHeader = new Uint8Array(invoiceBytes.slice(0, 8));
+  const validInvoice = invoice.type === "application/pdf" ? String.fromCharCode(...invoiceHeader.slice(0, 5)) === "%PDF-"
+    : invoice.type === "image/jpeg" ? invoiceHeader[0] === 0xff && invoiceHeader[1] === 0xd8 && invoiceHeader[2] === 0xff
+      : [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => invoiceHeader[index] === byte);
+  if (!validInvoice) return error("محتوى ملف الفاتورة لا يطابق نوع الملف المحدد");
+  const current = await env.DB.prepare("SELECT m.vehicle_id,m.status,s.name station_name FROM vehicle_maintenance m JOIN stations s ON s.id=m.station_id WHERE m.id=?").bind(id).first<any>();
   if (!current || current.status !== "open") return error("الطلب غير موجود أو مغلق بالفعل", 409);
+  if (access.profile?.role === "station_user" && current.station_name !== access.profile.station) return error("الطلب خارج نطاق محطتك", 403);
+  const invoiceKey = `maintenance-invoices/${crypto.randomUUID()}`;
   try {
+    await bucket().put(invoiceKey, invoiceBytes, { httpMetadata: { contentType: invoice.type } });
     const [closed] = await env.DB.batch([
-      env.DB.prepare(`UPDATE vehicle_maintenance SET status='closed',performed_work=?,received_at=?,received_by=?,maintenance_recommendation=?,manager_recommendation=?,finance_recommendation=?,administrative_recommendation=?,closed_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='open'`)
-        .bind(performed,receivedAt,receiver,body.maintenanceRecommendation||null,body.managerRecommendation||null,body.financeRecommendation||null,body.administrativeRecommendation||null,access.email,id),
+      env.DB.prepare(`UPDATE vehicle_maintenance SET status='closed',performed_work=?,repair_cost_ils=?,workshop_name=?,workshop_address=?,invoice_key=?,invoice_name=?,invoice_type=?,received_at=?,received_by=?,maintenance_recommendation=?,manager_recommendation=?,finance_recommendation=?,administrative_recommendation=?,closed_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='open'`)
+        .bind(performed,repairCost,workshopName,workshopAddress,invoiceKey,invoice.name,invoice.type,receivedAt,receiver,str(form.get("maintenanceRecommendation"))||null,str(form.get("managerRecommendation"))||null,str(form.get("financeRecommendation"))||null,str(form.get("administrativeRecommendation"))||null,access.email,id),
       env.DB.prepare(`UPDATE vehicles SET active=1,service_status='active',out_of_service_reason=NULL WHERE id=? AND NOT EXISTS (SELECT 1 FROM vehicle_maintenance WHERE vehicle_id=? AND status='open')`).bind(current.vehicle_id,current.vehicle_id),
+      env.DB.prepare("INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,'close','maintenance',?,?)").bind(access.email,String(id),JSON.stringify({ repairCostIls: repairCost, workshopName })),
     ]);
-    if (!closed.meta.changes) return error("الطلب مغلق بالفعل", 409);
+    if (!closed.meta.changes) { await bucket().delete(invoiceKey); return error("الطلب مغلق بالفعل", 409); }
     return NextResponse.json({ ok: true });
-  } catch { return error("تعذر إغلاق الطلب؛ حالة المركبة لم تتغير", 500); }
+  } catch { await bucket().delete(invoiceKey).catch(() => undefined); return error("تعذر إغلاق الطلب؛ حالة المركبة لم تتغير", 500); }
+}
+
+export async function DELETE(request: NextRequest) {
+  const access = await accessFor(request);
+  if (!access || !hasPermission(access.profile,"maintenance.manage")) return error("حذف طلب الصيانة غير مسموح", 403);
+  const body = await request.json().catch(() => ({})) as Record<string, unknown>;
+  const id = Number(body.id);
+  if (!Number.isInteger(id) || id < 1) return error("رقم الطلب غير صالح");
+  const current = await env.DB.prepare("SELECT m.id,m.vehicle_id,m.status,m.attachment_key,m.invoice_key,s.name station_name FROM vehicle_maintenance m JOIN stations s ON s.id=m.station_id WHERE m.id=?").bind(id).first<any>();
+  if (!current) return error("طلب الصيانة غير موجود", 404);
+  if (access.profile?.role === "station_user" && current.station_name !== access.profile.station) return error("الطلب خارج نطاق محطتك", 403);
+  try {
+    const [, deleted] = await env.DB.batch([
+      env.DB.prepare("UPDATE incidents SET maintenance_request_id=NULL WHERE maintenance_request_id=?").bind(id),
+      env.DB.prepare("DELETE FROM vehicle_maintenance WHERE id=?").bind(id),
+      env.DB.prepare(`UPDATE vehicles SET active=1,service_status='active',out_of_service_reason=NULL WHERE id=? AND ?='open' AND NOT EXISTS (SELECT 1 FROM vehicle_maintenance WHERE vehicle_id=? AND status='open')`).bind(current.vehicle_id,current.status,current.vehicle_id),
+      env.DB.prepare("INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,'delete','maintenance',?,?)").bind(access.email,String(id),JSON.stringify({ status: current.status, vehicleId: current.vehicle_id })),
+    ]);
+    if (!deleted.meta.changes) return error("طلب الصيانة غير موجود", 404);
+    await Promise.all([current.attachment_key, current.invoice_key].filter(Boolean).map((key) => bucket().delete(String(key))));
+    return NextResponse.json({ ok: true });
+  } catch { return error("تعذر حذف طلب الصيانة", 500); }
 }

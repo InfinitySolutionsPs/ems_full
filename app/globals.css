@@ -2312,6 +2312,8 @@ tbody tr:hover {
 .maintenance-close, .maintenance-completed { border-top: 1px solid var(--line); padding-top: 18px; }
 .maintenance-close .maintenance-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 18px 0; }
 .maintenance-completed p { white-space: pre-wrap; }
+.maintenance-row-actions, .maintenance-close-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.maintenance-close-actions { justify-content: space-between; }
 @media (max-width: 1050px) { .maintenance-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .maintenance-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 640px) { .maintenance-hero { flex-wrap: wrap; } .maintenance-fields, .maintenance-filters, .maintenance-close .maintenance-fields, .maintenance-detail { grid-template-columns: 1fr; } .maintenance-fields .wide { grid-column: 1; } .maintenance-form, .maintenance-results { padding: 16px; } }
 @media (max-width: 1050px) {
