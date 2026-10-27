@@ -114,28 +114,31 @@ export async function PATCH(request: NextRequest) {
   const repairCost = Number(str(form.get("repairCostIls")));
   const invoice = form.get("invoice");
   if (!Number.isInteger(id) || id < 1 || !performed || !receiver || !date(receivedAt) || !workshopName || !workshopAddress || !Number.isFinite(repairCost) || repairCost < 0) return error("أكملي إجراءات الصيانة والتكلفة وبيانات الورشة والاستلام");
-  if (!(invoice instanceof File) || !invoice.size || invoice.size > 10 * 1024 * 1024 || !["application/pdf", "image/jpeg", "image/png"].includes(invoice.type)) return error("أرفقي فاتورة بصيغة PDF أو صورة JPG/PNG وبحجم لا يتجاوز 10 ميغابايت");
-  const invoiceBytes = await invoice.arrayBuffer();
-  const invoiceHeader = new Uint8Array(invoiceBytes.slice(0, 8));
-  const validInvoice = invoice.type === "application/pdf" ? String.fromCharCode(...invoiceHeader.slice(0, 5)) === "%PDF-"
-    : invoice.type === "image/jpeg" ? invoiceHeader[0] === 0xff && invoiceHeader[1] === 0xd8 && invoiceHeader[2] === 0xff
-      : [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => invoiceHeader[index] === byte);
-  if (!validInvoice) return error("محتوى ملف الفاتورة لا يطابق نوع الملف المحدد");
+  const invoiceFile = invoice instanceof File && invoice.size > 0 ? invoice : null;
+  if (invoiceFile && (invoiceFile.size > 10 * 1024 * 1024 || !["application/pdf", "image/jpeg", "image/png"].includes(invoiceFile.type))) return error("يجب أن تكون الفاتورة بصيغة PDF أو صورة JPG/PNG وبحجم لا يتجاوز 10 ميغابايت");
+  const invoiceBytes = invoiceFile ? await invoiceFile.arrayBuffer() : null;
+  if (invoiceFile && invoiceBytes) {
+    const invoiceHeader = new Uint8Array(invoiceBytes.slice(0, 8));
+    const validInvoice = invoiceFile.type === "application/pdf" ? String.fromCharCode(...invoiceHeader.slice(0, 5)) === "%PDF-"
+      : invoiceFile.type === "image/jpeg" ? invoiceHeader[0] === 0xff && invoiceHeader[1] === 0xd8 && invoiceHeader[2] === 0xff
+        : [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => invoiceHeader[index] === byte);
+    if (!validInvoice) return error("محتوى ملف الفاتورة لا يطابق نوع الملف المحدد");
+  }
   const current = await env.DB.prepare("SELECT m.vehicle_id,m.status,s.name station_name FROM vehicle_maintenance m JOIN stations s ON s.id=m.station_id WHERE m.id=?").bind(id).first<any>();
   if (!current || current.status !== "open") return error("الطلب غير موجود أو مغلق بالفعل", 409);
   if (access.profile?.role === "station_user" && current.station_name !== access.profile.station) return error("الطلب خارج نطاق محطتك", 403);
-  const invoiceKey = `maintenance-invoices/${crypto.randomUUID()}`;
+  const invoiceKey = invoiceFile ? `maintenance-invoices/${crypto.randomUUID()}` : null;
   try {
-    await bucket().put(invoiceKey, invoiceBytes, { httpMetadata: { contentType: invoice.type } });
+    if (invoiceKey && invoiceBytes && invoiceFile) await bucket().put(invoiceKey, invoiceBytes, { httpMetadata: { contentType: invoiceFile.type } });
     const [closed] = await env.DB.batch([
       env.DB.prepare(`UPDATE vehicle_maintenance SET status='closed',performed_work=?,repair_cost_ils=?,workshop_name=?,workshop_address=?,invoice_key=?,invoice_name=?,invoice_type=?,received_at=?,received_by=?,maintenance_recommendation=?,manager_recommendation=?,finance_recommendation=?,administrative_recommendation=?,closed_by=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='open'`)
-        .bind(performed,repairCost,workshopName,workshopAddress,invoiceKey,invoice.name,invoice.type,receivedAt,receiver,str(form.get("maintenanceRecommendation"))||null,str(form.get("managerRecommendation"))||null,str(form.get("financeRecommendation"))||null,str(form.get("administrativeRecommendation"))||null,access.email,id),
+        .bind(performed,repairCost,workshopName,workshopAddress,invoiceKey,invoiceFile?.name||null,invoiceFile?.type||null,receivedAt,receiver,str(form.get("maintenanceRecommendation"))||null,str(form.get("managerRecommendation"))||null,str(form.get("financeRecommendation"))||null,str(form.get("administrativeRecommendation"))||null,access.email,id),
       env.DB.prepare(`UPDATE vehicles SET active=1,service_status='active',out_of_service_reason=NULL WHERE id=? AND NOT EXISTS (SELECT 1 FROM vehicle_maintenance WHERE vehicle_id=? AND status='open')`).bind(current.vehicle_id,current.vehicle_id),
       env.DB.prepare("INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,'close','maintenance',?,?)").bind(access.email,String(id),JSON.stringify({ repairCostIls: repairCost, workshopName })),
     ]);
-    if (!closed.meta.changes) { await bucket().delete(invoiceKey); return error("الطلب مغلق بالفعل", 409); }
+    if (!closed.meta.changes) { if (invoiceKey) await bucket().delete(invoiceKey); return error("الطلب مغلق بالفعل", 409); }
     return NextResponse.json({ ok: true });
-  } catch { await bucket().delete(invoiceKey).catch(() => undefined); return error("تعذر إغلاق الطلب؛ حالة المركبة لم تتغير", 500); }
+  } catch { if (invoiceKey) await bucket().delete(invoiceKey).catch(() => undefined); return error("تعذر إغلاق الطلب؛ حالة المركبة لم تتغير", 500); }
 }
 
 export async function DELETE(request: NextRequest) {
