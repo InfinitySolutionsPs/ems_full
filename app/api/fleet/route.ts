@@ -25,13 +25,34 @@ export async function GET(request: NextRequest) {
   const pending=fleet.filter((v:any)=>!knownFleet.has(String(v.plate).replace(/\s/g,"")));
   for(let i=0;i<pending.length;i+=40) await env.DB.batch(pending.slice(i,i+40).map((v:any)=>env.DB.prepare("INSERT INTO vehicles (plate_number,manufacturer,model,production_year,chassis_number,fuel_type,mileage_km,ambulance_type,usage_status,work_location,service_status,active,fleet_source_row,center_id) VALUES (?,?,?,?,?,?,?,?,? ,?,'active',1,?,?) ON CONFLICT(plate_number) DO NOTHING").bind(v.plate,v.manufacturer||null,v.model||null,Number(v.productionYear)||null,v.chassis||null,v.fuelType||null,Number(v.mileage)||null,v.ambulanceType||null,v.usage||null,v.location||null,v.sourceRow,centerIds.get(stationCode(v.location))||null)));
   const station = access.profile.role === "station_user" ? access.profile.station : null;
-  const from = new URL(request.url).searchParams.get("from") || "1900-01-01";
-  const to = new URL(request.url).searchParams.get("to") || "2999-12-31";
+  const query = new URL(request.url).searchParams;
+  const from = query.get("from") || "1900-01-01";
+  const to = query.get("to") || "2999-12-31";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) return reply("الفترة غير صالحة");
   const vehicles = await env.DB.prepare("SELECT v.*,v.center_id station_id,c.name station_name,c.name center_name FROM vehicles v LEFT JOIN centers c ON c.id=v.center_id ORDER BY v.plate_number").all();
-  const scope = station ? await env.DB.prepare("SELECT center_id FROM stations WHERE name=? LIMIT 1").bind(station).first<any>() : null;
+  const scope = station ? await env.DB.prepare(`SELECT id center_id FROM centers WHERE name=?
+    UNION ALL SELECT center_id FROM stations WHERE name=? AND center_id IS NOT NULL LIMIT 1`).bind(station,station).first<any>() : null;
   const available = scope?.center_id ? vehicles.results.filter((v: any) => Number(v.center_id) === Number(scope.center_id)) : station ? [] : vehicles.results;
   const ids = new Set(available.map((v: any) => Number(v.id)));
+  const detailVehicleId = Number(query.get("vehicleId") || 0);
+  if (query.has("vehicleId")) {
+    if (!Number.isInteger(detailVehicleId) || detailVehicleId < 1) return reply("رقم المركبة غير صالح");
+    const vehicle = available.find((v:any)=>Number(v.id)===detailVehicleId);
+    if (!vehicle) return reply("المركبة غير موجودة أو خارج نطاق مركزك",404);
+    const canViewIncidents = hasPermission(access.profile,"incidents.view");
+    const canViewMaintenance = hasPermission(access.profile,"maintenance.view");
+    const [detailIncidents,detailFuel,detailMovements,detailMaintenance] = await Promise.all([
+      canViewIncidents ? env.DB.prepare(`SELECT id,incident_number,call_date,call_time,beneficiary_name,case_type,urgency,station,approval_status,incident_status,distance_km
+        FROM incidents WHERE vehicle_id=? OR TRIM(vehicle)=TRIM(?) ORDER BY call_date DESC,call_time DESC LIMIT 2000`).bind(detailVehicleId,vehicle.plate_number).all() : Promise.resolve({results:[]}),
+      env.DB.prepare(`SELECT f.*,i.incident_number FROM fuel_fillings f LEFT JOIN incidents i ON i.id=f.incident_id
+        WHERE f.vehicle_id=? ORDER BY f.filled_at DESC LIMIT 2000`).bind(detailVehicleId).all(),
+      env.DB.prepare(`SELECT m.*,i.incident_number FROM vehicle_movements m LEFT JOIN incidents i ON i.id=m.incident_id
+        WHERE m.vehicle_id=? ORDER BY m.departed_at DESC LIMIT 2000`).bind(detailVehicleId).all(),
+      canViewMaintenance ? env.DB.prepare(`SELECT m.id,m.request_date,m.department,m.odometer_km,m.requested_repair,m.failure_cause,m.driver_name,m.status,m.performed_work,m.received_at,m.received_by,s.name station_name
+        FROM vehicle_maintenance m LEFT JOIN stations s ON s.id=m.station_id WHERE m.vehicle_id=? ORDER BY m.request_date DESC,m.id DESC LIMIT 1000`).bind(detailVehicleId).all() : Promise.resolve({results:[]}),
+    ]);
+    return NextResponse.json({vehicle,incidents:detailIncidents.results,fuel:detailFuel.results,movements:detailMovements.results,maintenance:detailMaintenance.results});
+  }
   const [fuel, movements, incidents] = await env.DB.batch([
     env.DB.prepare("SELECT f.*,v.plate_number,i.incident_number FROM fuel_fillings f JOIN vehicles v ON v.id=f.vehicle_id LEFT JOIN incidents i ON i.id=f.incident_id WHERE substr(f.filled_at,1,10) BETWEEN ? AND ? ORDER BY f.filled_at DESC LIMIT 1000").bind(from,to),
     env.DB.prepare("SELECT m.*,v.plate_number,i.incident_number FROM vehicle_movements m JOIN vehicles v ON v.id=m.vehicle_id LEFT JOIN incidents i ON i.id=m.incident_id WHERE substr(m.departed_at,1,10) BETWEEN ? AND ? ORDER BY m.departed_at DESC LIMIT 1000").bind(from,to),
@@ -41,9 +62,10 @@ export async function GET(request: NextRequest) {
   const plates = new Set(available.map((v:any)=>normalize(v.plate_number)));
   const existingPlates = new Set(vehicles.results.map((v:any)=>normalize(v.plate_number)));
   const pendingImportCount = access.profile.role === "admin" ? fleet.filter(v=>v.plate!=="3-2003-55" && v.plate!=="3-0257-55" && !existingPlates.has(normalize(v.plate))).length : 0;
+  const allowedStationNames = scope?.center_id ? new Set((await env.DB.prepare("SELECT name FROM stations WHERE center_id=?").bind(scope.center_id).all()).results.map((row:any)=>String(row.name))) : null;
   return NextResponse.json({ vehicles: available, canEditVehicles: hasPermission(access.profile,"fleet.manage"), pendingImportCount, fuel: fuel.results.filter((r:any)=>ids.has(Number(r.vehicle_id))),
     movements: movements.results.filter((r:any)=>ids.has(Number(r.vehicle_id))),
-    incidents: incidents.results.filter((r:any)=>(!station || r.station===station) && (ids.has(Number(r.vehicle_id)) || plates.has(normalize(r.vehicle)))),
+    incidents: incidents.results.filter((r:any)=>(!station || allowedStationNames?.has(String(r.station))) && (ids.has(Number(r.vehicle_id)) || plates.has(normalize(r.vehicle)))),
     importReview: [{plate:"3-2003-55",reason:"وردت مرتين بوقود وحالة مختلفين (صفا 42 و78)"},{plate:"3-0257-55",reason:"مدرجة تحت الصيانة لكن حالتها داخل الخدمة (صف 87)"}] });
 }
 
