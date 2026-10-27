@@ -1305,13 +1305,15 @@ tbody tr:hover {
 .fleet-page .fleet-tabs { border-bottom:1px solid #ece8ea; padding-bottom:14px; }
 .fleet-page .fleet-tabs button { min-width:140px; padding:11px 22px; }
 .fleet-page .fleet-main-tabs { margin:0; padding:10px; border:1px solid #eadfe2; border-radius:18px; background:#fff; box-shadow:0 8px 24px rgba(31,41,55,.04); }
-.fleet-page .fleet-main-tabs button { flex:1; min-height:56px; display:flex; align-items:center; justify-content:center; gap:9px; border:0; border-radius:13px; font-weight:800; color:#5d6675; }
+.fleet-page .fleet-main-tabs button { position:relative; flex:1; min-height:56px; display:flex; align-items:center; justify-content:center; gap:9px; border:0; border-radius:13px; font-weight:800; color:#5d6675; }
+.fleet-page .fleet-main-tabs button+button::before { content:""; position:absolute; inset-inline-start:-6px; top:10px; bottom:10px; width:1px; background:#ddd4d7; box-shadow:1px 0 0 #fff; }
 .fleet-page .fleet-main-tabs button svg { width:20px; height:20px; }
 .fleet-page .fleet-main-tabs button span { min-width:28px; height:28px; display:inline-grid; place-items:center; border-radius:999px; background:#f5e8eb; color:#b3162f; font-size:12px; }
 .fleet-page .fleet-main-tabs button.active { background:linear-gradient(135deg,#c91431,#ad1029); color:#fff; box-shadow:0 10px 22px rgba(201,20,49,.2); }
+.fleet-page .fleet-main-tabs button.active::before,.fleet-page .fleet-main-tabs button.active+button::before { opacity:.2; }
 .fleet-page .fleet-main-tabs button.active span { background:rgba(255,255,255,.2); color:#fff; }
 .fleet-page .fleet-section-metrics { grid-template-columns:repeat(2,minmax(0,1fr)); }
-@media(max-width:650px){.fleet-page .fleet-main-tabs{flex-direction:column}.fleet-page .fleet-main-tabs button{width:100%}.fleet-page .fleet-section-metrics{grid-template-columns:1fr}}
+@media(max-width:650px){.fleet-page .fleet-main-tabs{flex-direction:column}.fleet-page .fleet-main-tabs button{width:100%}.fleet-page .fleet-main-tabs button+button::before{inset-inline-start:18px;inset-inline-end:18px;top:-6px;bottom:auto;width:auto;height:1px}.fleet-page .fleet-section-metrics{grid-template-columns:1fr}}
 .fleet-directory { padding:24px!important; }
 .fleet-directory .table-wrap { overflow-x:auto; }
 @media(max-width:1050px) { .fleet-page .fleet-filters { grid-template-columns:repeat(2,minmax(0,1fr)); } .fleet-page .fleet-filters span { grid-column:1/-1; } .fleet-page .fleet-form { grid-template-columns:repeat(2,minmax(0,1fr)); } }
