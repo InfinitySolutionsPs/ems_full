@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
   const existingPlates = new Set(vehicles.results.map((v:any)=>normalize(v.plate_number)));
   const pendingImportCount = access.profile.role === "admin" ? fleet.filter(v=>v.plate!=="3-2003-55" && v.plate!=="3-0257-55" && !existingPlates.has(normalize(v.plate))).length : 0;
   const allowedStationNames = scope?.center_id ? new Set((await env.DB.prepare("SELECT name FROM stations WHERE center_id=?").bind(scope.center_id).all()).results.map((row:any)=>String(row.name))) : null;
-  return NextResponse.json({ vehicles: available, canEditVehicles: hasPermission(access.profile,"fleet.manage"), pendingImportCount, fuel: fuel.results.filter((r:any)=>ids.has(Number(r.vehicle_id))),
+  return NextResponse.json({ vehicles: available, canEditVehicles: hasPermission(access.profile,"fleet.manage"), canDeleteVehicles: hasPermission(access.profile,"settings.manage"), pendingImportCount, fuel: fuel.results.filter((r:any)=>ids.has(Number(r.vehicle_id))),
     movements: movements.results.filter((r:any)=>ids.has(Number(r.vehicle_id))),
     incidents: incidents.results.filter((r:any)=>(!station || allowedStationNames?.has(String(r.station))) && (ids.has(Number(r.vehicle_id)) || plates.has(normalize(r.vehicle)))),
     importReview: [{plate:"3-2003-55",reason:"وردت مرتين بوقود وحالة مختلفين (صفا 42 و78)"},{plate:"3-0257-55",reason:"مدرجة تحت الصيانة لكن حالتها داخل الخدمة (صف 87)"}] });

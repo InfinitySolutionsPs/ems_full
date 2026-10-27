@@ -1181,6 +1181,9 @@ tbody tr:hover {
 .fleet-state { display:inline-block; padding:5px 10px; border-radius:20px; font-size:12px; background:#fff2e9; color:#9b571f; white-space:nowrap; }
 .fleet-state.active { background:#e9f8ef; color:#167044; }
 .fleet-edit { white-space:nowrap; }
+.fleet-row-actions { display:flex; align-items:center; gap:7px; white-space:nowrap; }
+.fleet-row-actions .employee-delete { margin-inline-start:0; cursor:pointer; }
+.fleet-row-actions .employee-delete:disabled { opacity:.55; cursor:wait; }
 .vehicle-profile-link { border:0; background:transparent; color:#a9132f; padding:0; font:inherit; font-weight:900; cursor:pointer; text-decoration:underline; text-decoration-thickness:1px; text-underline-offset:4px; }
 .vehicle-profile-link:hover { color:#d01838; }
 .vehicle-profile-backdrop { z-index:120; padding:24px; }
