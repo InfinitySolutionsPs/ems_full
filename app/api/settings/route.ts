@@ -358,10 +358,13 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   const access = await getAccess(request);
-  if (!hasPermission(access.profile, "settings.manage"))
-    return NextResponse.json({ error: "الحذف متاح لمدير النظام فقط" }, { status: 403 });
-
   const { entity, id, key } = (await request.json()) as Record<string, any>;
+  const allowed = entity === "vehicle"
+    ? hasPermission(access.profile, "fleet.manage")
+    : hasPermission(access.profile, "settings.manage");
+  if (!allowed)
+    return NextResponse.json({ error: entity === "vehicle" ? "حذف المركبات يحتاج صلاحية إدارة المركبات" : "الحذف متاح لمدير النظام فقط" }, { status: 403 });
+
   try {
     if (entity === "setting") {
       if (!key) return NextResponse.json({ error: "الإعداد غير محدد" }, { status: 400 });
