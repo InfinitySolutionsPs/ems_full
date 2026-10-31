@@ -284,6 +284,7 @@ export default function HomePage() {
       settings: [],
     });
   const [maintenancePrefill, setMaintenancePrefill] = useState<any>(null);
+  const [requestedIncidentId,setRequestedIncidentId]=useState<number|null>(null);
   const [passwordOpen,setPasswordOpen]=useState(false);
   const [passwordDraft,setPasswordDraft]=useState({currentPassword:"",newPassword:"",confirmPassword:""});
   const [passwordBusy,setPasswordBusy]=useState(false);
@@ -654,6 +655,8 @@ export default function HomePage() {
             currentUser={currentUser}
             canEdit={can("incidents.edit")}
             canEditApproved={can("incidents.edit_approved")}
+            initialIncidentId={requestedIncidentId}
+            onInitialIncidentHandled={()=>setRequestedIncidentId(null)}
           />
         )}{" "}
         {view === "approvals" && (
@@ -683,7 +686,7 @@ export default function HomePage() {
         )}
         {view === "capacity" && <OperationalCapacity data={settingsData} />}
         {view === "coordination" && <CoordinationView />}
-        {view === "fleet" && <FleetView staff={settingsData.staff} centersData={settingsData.centers} onImported={loadAux} />}
+        {view === "fleet" && <FleetView staff={settingsData.staff} centersData={settingsData.centers} onImported={loadAux} onOpenIncident={incidentId=>{setRequestedIncidentId(incidentId);setView("records")}} />}
         {view === "maintenance" && <MaintenanceView onVehiclesChanged={loadAux} prefill={maintenancePrefill} />}
       </main>
     </div>
@@ -1549,6 +1552,8 @@ function Records({
   currentUser,
   canEdit,
   canEditApproved,
+  initialIncidentId,
+  onInitialIncidentHandled,
 }: {
   incidents: Incident[];
   loading: boolean;
@@ -1562,6 +1567,8 @@ function Records({
   currentUser: any;
   canEdit: boolean;
   canEditApproved: boolean;
+  initialIncidentId: number | null;
+  onInitialIncidentHandled: () => void;
 }) {
   const [search, setSearch] = useState("");
   const [recordFilters, setRecordFilters] = useState({ station:"all", shift:"all", urgency:"all", approval:"all" });
@@ -1644,6 +1651,17 @@ function Records({
       notes: x.notes || "",
     });
   };
+  useEffect(()=>{
+    if(!initialIncidentId)return;
+    const local=incidents.find(item=>Number(item.id)===Number(initialIncidentId));
+    if(local){openIncident(local);onInitialIncidentHandled();return}
+    const controller=new AbortController();
+    fetch(`/api/incidents?id=${initialIncidentId}`,{cache:"no-store",signal:controller.signal})
+      .then(async response=>{const body=await response.json();if(!response.ok)throw Error(body.error||"تعذر فتح البلاغ");openIncident(body.incident)})
+      .catch(error=>{if(!(error instanceof DOMException&&error.name==="AbortError"))toast.error(String(error).replace(/^Error: /,""))})
+      .finally(onInitialIncidentHandled);
+    return()=>controller.abort();
+  },[initialIncidentId]);
   const updateIncident = async (requestedAction?:"draft"|"approve") => { setSaving(true); try { const submissionAction=requestedAction||(selected?.approval_status==="approved"?"approve":"draft"); const r=await fetch("/api/incidents",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({...incidentDraft,submissionAction})}); const v=await r.json(); if(!r.ok) throw Error(v.error||"تعذر تعديل البلاغ"); toast.success(submissionAction==="approve"?"تم اعتماد البلاغ وحفظ بياناته":"تم حفظ المسودة بالوضع الحالي"); setSelected(null); setEditing(false); onRefresh(); } catch(e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setSaving(false); } };
   const deleteIncident = async () => { if(!isAdmin || !selected) return; if(!window.confirm(`هل تريدين حذف البلاغ ${selected.incident_number} نهائيًا؟`)) return; setSaving(true); try { const r=await fetch(`/api/incidents?id=${selected.id}`,{method:"DELETE"}); const v=await r.json(); if(!r.ok) throw Error(v.error||"تعذر حذف البلاغ"); toast.success("تم حذف البلاغ"); setSelected(null); onRefresh(); } catch(e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setSaving(false); } };
   const mayEditSelected = !!selected && (selected.approval_status === "approved" ? canEditApproved : canEdit || (selected.approval_status === "draft" && Number(selected.created_by_user_id) === Number(currentUser?.id)));
@@ -1893,7 +1911,7 @@ function Records({
                     </select>
                   ) : (
                     type === "time" ? <Time24Input value={incidentDraft[key]||""} disabled={!editing} onChange={value=>setIncidentDraft({...incidentDraft,[key]:value})}/> : <input
-                      disabled={!editing}
+                      disabled={!editing || (key==="kmStart" && selected.approval_status!=="approved")}
                       type={type}
                       lang={type==="date"?"en-GB":undefined}
                       dir={type==="date"||type==="number"?"ltr":undefined}
@@ -4653,7 +4671,7 @@ function MovementReport({from,to}:{from:string;to:string}) {
   return <div className="page-stack movement-report" dir="rtl"><button hidden id="movement-report-export" onClick={exportRows}/><section className="panel movement-options"><div className="filter-title"><span className="filter-mark"><SlidersHorizontal/></span><span><b>فلاتر سجل الحركة</b><small>{rows.length} حركة ضمن الفترة المختارة</small></span></div><div className="movement-option-fields"><label>المركبة<select value={options.vehicle} onChange={e=>setOptions({...options,vehicle:e.target.value})}><option value="all">جميع المركبات</option>{vehicles.map((v:any)=><option key={v.id} value={v.id}>{v.plate_number}</option>)}</select></label><label>المحطة<select value={options.station} onChange={e=>setOptions({...options,station:e.target.value})}><option value="all">كل المحطات</option>{[...new Map(vehicles.filter((v:any)=>v.station_id).map((v:any)=>[v.station_id,v.station_name])).entries()].map(([id,name]:any)=><option key={id} value={id}>{name}</option>)}</select></label><label>السائق<select value={options.driver} onChange={e=>setOptions({...options,driver:e.target.value})}><option value="all">كل السائقين</option>{[...new Set((data.movements||[]).map((m:any)=>m.driver_name).filter(Boolean))].map((name:any)=><option key={name}>{name}</option>)}</select></label><label>ربط البلاغ<select value={options.linked} onChange={e=>setOptions({...options,linked:e.target.value})}><option value="all">الكل</option><option value="yes">مرتبطة ببلاغ</option><option value="no">دون بلاغ</option></select></label><button className="ghost" onClick={()=>setOptions({vehicle:"all",station:"all",driver:"all",linked:"all"})}><RefreshCw/> مسح</button></div></section><section className="panel movement-sheet"><div className="movement-letterhead"><b>جمعية الهلال الأحمر الفلسطيني</b><span>دائرة الإسعاف والطوارئ</span><h2>تقرير حركة سيارات الإسعاف</h2><p>من {from} إلى {to} · المركبة: {options.vehicle==="all"?"جميع المركبات":vehicles.find((v:any)=>String(v.id)===options.vehicle)?.plate_number} · عدد الحركات: {rows.length} · مجموع المسافة المسجلة: {total.toFixed(1)} كم</p></div><div className="table-wrap"><table><thead><tr>{["م","التاريخ","السائق","المركبة","المحطة","الخروج","العودة","الوجهة","عداد البداية","عداد النهاية","المسافة كم","البلاغ","ملاحظات"].map(x=><th key={x}>{x}</th>)}</tr></thead><tbody>{rows.map((m:any,i:number)=><tr key={m.id}><td>{i+1}</td><td>{String(m.departed_at||"").slice(0,10)}</td><td>{m.driver_name||"—"}</td><td>{m.plate_number||"—"}</td><td>{vehicles.find((v:any)=>v.id===m.vehicle_id)?.station_name||"—"}</td><td>{formatDateTime24(m.departed_at)}</td><td>{m.returned_at?formatDateTime24(m.returned_at):"قيد الحركة"}</td><td>{m.destination||"—"}</td><td>{m.km_start??"—"}</td><td>{m.km_end??"—"}</td><td>{distance(m)==null?"—":distance(m).toFixed(1)}</td><td>{m.incident_number||"—"}</td><td>{m.notes||"—"}</td></tr>)}</tbody></table>{!rows.length&&<Empty/>}</div></section></div>;
 }
 
-function FleetView({staff,centersData,onImported}:{staff:any[];centersData:any[];onImported:()=>void}) {
+function FleetView({staff,centersData,onImported,onOpenIncident}:{staff:any[];centersData:any[];onImported:()=>void;onOpenIncident:(incidentId:number)=>void}) {
   // Kept as a local alias while the fleet view transitions from station ownership
   // to center ownership; values and identifiers below are centers.
   const stationsData = centersData;
@@ -4767,7 +4785,7 @@ function FleetView({staff,centersData,onImported}:{staff:any[];centersData:any[]
           <button className={vehicleProfileTab==="movements"?"active":""} onClick={()=>setVehicleProfileTab("movements")}><Route/> الحركة والعداد <i>{profileMovements.length}</i></button>
         </div>
         <div className="vehicle-profile-content table-wrap">
-          {vehicleProfileTab==="incidents"&&<table><thead><tr><th>رقم البلاغ</th><th>التاريخ والوقت</th><th>المستفيد</th><th>الحالة</th><th>الأولوية</th><th>المركز/المحطة</th><th>حالة البلاغ</th><th>المسافة</th></tr></thead><tbody>{profileIncidents.map((row:any)=><tr key={row.id}><td><b>{row.incident_number}</b></td><td>{row.call_date}<small>{row.call_time||""}</small></td><td>{row.beneficiary_name||"—"}</td><td>{row.case_type||"—"}</td><td>{urgencyArabic[row.urgency]||row.urgency||"—"}</td><td>{row.station||"—"}</td><td><span className={`approval-status-badge ${row.approval_status==="draft"?"draft":"approved"}`}>{row.approval_status==="draft"?"مسودة":"معتمد"}</span></td><td>{Number(row.distance_km||0).toFixed(1)} كم</td></tr>)}</tbody></table>}
+          {vehicleProfileTab==="incidents"&&<table><thead><tr><th>رقم البلاغ</th><th>التاريخ والوقت</th><th>المستفيد</th><th>الحالة</th><th>الأولوية</th><th>المركز/المحطة</th><th>حالة البلاغ</th><th>المسافة</th></tr></thead><tbody>{profileIncidents.map((row:any)=><tr key={row.id}><td><button type="button" className="vehicle-profile-link" onClick={()=>onOpenIncident(Number(row.id))}>{row.incident_number}</button></td><td>{row.call_date}<small>{row.call_time||""}</small></td><td>{row.beneficiary_name||"—"}</td><td>{row.case_type||"—"}</td><td>{urgencyArabic[row.urgency]||row.urgency||"—"}</td><td>{row.station||"—"}</td><td><span className={`approval-status-badge ${row.approval_status==="draft"?"draft":"approved"}`}>{row.approval_status==="draft"?"مسودة":"معتمد"}</span></td><td>{Number(row.distance_km||0).toFixed(1)} كم</td></tr>)}</tbody></table>}
           {vehicleProfileTab==="maintenance"&&<table><thead><tr><th>التاريخ</th><th>القسم</th><th>العداد</th><th>العطل/الإصلاح المطلوب</th><th>الحالة</th><th>الإصلاح المنفذ</th><th>الاستلام</th></tr></thead><tbody>{profileMaintenance.map((row:any)=><tr key={row.id}><td>{row.request_date}</td><td>{row.department||"—"}</td><td>{Number(row.odometer_km||0).toFixed(1)}</td><td>{row.requested_repair||"—"}{row.failure_cause&&<small>{row.failure_cause}</small>}</td><td><span className={`fleet-state ${row.status==="closed"?"active":"inactive"}`}>{row.status==="closed"?"مغلق":"مفتوح"}</span></td><td>{row.performed_work||"—"}</td><td>{row.received_at||"—"}{row.received_by&&<small>{row.received_by}</small>}</td></tr>)}</tbody></table>}
           {vehicleProfileTab==="fuel"&&<table><thead><tr><th>التاريخ والوقت</th><th>الكمية</th><th>العداد</th><th>السائق</th><th>من عبّأ</th><th>البلاغ</th><th>القسيمة</th><th>المصدر</th></tr></thead><tbody>{profileFuel.map((row:any)=><tr key={row.id}><td>{formatDateTime24(row.filled_at)}</td><td><b>{Number(row.liters||0).toFixed(1)} لتر</b></td><td>{Number(row.odometer_km||0).toFixed(1)}</td><td>{row.driver_name||"—"}</td><td>{row.filled_by_name||"—"}</td><td>{row.incident_number||"—"}</td><td>{row.voucher_number||"—"}</td><td>{row.source_name||"—"}</td></tr>)}</tbody></table>}
           {vehicleProfileTab==="movements"&&<table><thead><tr><th>الخروج</th><th>العودة</th><th>السائق</th><th>الوجهة</th><th>عداد البداية</th><th>عداد النهاية</th><th>المسافة</th><th>البلاغ</th></tr></thead><tbody>{profileMovements.map((row:any)=><tr key={row.id}><td>{formatDateTime24(row.departed_at)}</td><td>{row.returned_at?formatDateTime24(row.returned_at):"قيد الحركة"}</td><td>{row.driver_name||"—"}</td><td>{row.destination||"—"}</td><td>{Number(row.km_start||0).toFixed(1)}</td><td>{row.km_end==null?"—":Number(row.km_end).toFixed(1)}</td><td>{row.km_end==null?"—":`${Math.max(0,Number(row.km_end)-Number(row.km_start)).toFixed(1)} كم`}</td><td>{row.incident_number||"—"}</td></tr>)}</tbody></table>}
