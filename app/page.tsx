@@ -162,6 +162,30 @@ const formatDateTime24 = (value: unknown) => {
   const match = raw.match(/^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2})/);
   return match ? `${match[1]} ${match[2]}` : raw;
 };
+const timeTypingValue = (value: string) => {
+  const clean = value.replace(/[^0-9:]/g, "").slice(0, 5);
+  if (clean.includes(":")) {
+    const [hour = "", minute = ""] = clean.split(":");
+    return `${hour.slice(0, 2)}:${minute.slice(0, 2)}`;
+  }
+  return clean.length > 2 ? `${clean.slice(0, 2)}:${clean.slice(2)}` : clean;
+};
+const normalizedTime24 = (value: string) => {
+  const match = value.match(/^(\d{1,2}):(\d{1,2})$/);
+  if (!match) return value;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  return hour <= 23 && minute <= 59
+    ? `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`
+    : value;
+};
+function Time24Input({value,onChange,required=false,readOnly=false,disabled=false}:{value:string;onChange:(value:string)=>void;required?:boolean;readOnly?:boolean;disabled?:boolean}) {
+  return <input type="text" className="time-24-input latin-datetime" inputMode="numeric" autoComplete="off" placeholder="HH:mm" maxLength={5} pattern="(?:[01][0-9]|2[0-3]):[0-5][0-9]" title="أدخل الوقت بنظام 24 ساعة، مثال: 14:30" value={value||""} required={required} readOnly={readOnly} disabled={disabled} onChange={event=>onChange(timeTypingValue(event.target.value))} onBlur={event=>onChange(normalizedTime24(event.target.value))}/>;
+}
+function DateTime24Input({value,onChange,required=false}:{value:string;onChange:(value:string)=>void;required?:boolean}) {
+  const [date="",time=""] = String(value||"").split("T");
+  return <span className="datetime-24-control"><input type="date" lang="en-GB" dir="ltr" value={date} required={required} onChange={event=>onChange(event.target.value||time?`${event.target.value}T${time}`:"")}/><Time24Input value={time} required={required} onChange={nextTime=>onChange(date||nextTime?`${date}T${nextTime}`:"")}/></span>;
+}
 const palette = ["#c4172c", "#ef6a78", "#9c1d2d", "#f4a3ac", "#6e1423"];
 const today = new Date().toISOString().slice(0, 10);
 const monthStart = `${today.slice(0, 7)}-01`;
@@ -1075,7 +1099,7 @@ function IncidentForm({
     <label>
       {label}
       {required && <em>*</em>}
-      <input
+      {type === "time" ? <Time24Input value={form[name]} required={required} onChange={value=>setField(name,value)}/> : <input
         type={type}
         lang={type==="time"||type==="datetime-local"?"en-GB-u-hc-h23":type==="date"?"en-GB":undefined}
         dir={type==="time"||type==="datetime-local"||type==="date"||type==="number"||type==="tel"?"ltr":undefined}
@@ -1088,7 +1112,7 @@ function IncidentForm({
           if (name === "caseType" && /وفاة|شهيد|جث/i.test(value))
             setField("urgency", "Black");
         }}
-      />
+      />}
     </label>
   );
   const select = (
@@ -1157,7 +1181,7 @@ function IncidentForm({
           {field("callDate", "تاريخ البلاغ", "date", true)}
           <label>
             وقت إدخال البلاغ
-            <input type="time" lang="en-GB-u-hc-h23" dir="ltr" step="60" value={form.entryTime} readOnly />
+            <Time24Input value={form.entryTime} onChange={()=>{}} readOnly />
           </label>
           {field("callTime", "وقت استلام البلاغ", "time", true)}
           {requiresMovement && field("dispatchTime", "وقت تحرك المركبة", "time")}
@@ -1868,12 +1892,11 @@ function Records({
                       ))}
                     </select>
                   ) : (
-                    <input
+                    type === "time" ? <Time24Input value={incidentDraft[key]||""} disabled={!editing} onChange={value=>setIncidentDraft({...incidentDraft,[key]:value})}/> : <input
                       disabled={!editing}
                       type={type}
-                      lang={type==="time"||type==="date"?"en-GB":undefined}
-                      dir={type==="time"||type==="date"||type==="number"?"ltr":undefined}
-                      step={type==="time"?60:undefined}
+                      lang={type==="date"?"en-GB":undefined}
+                      dir={type==="date"||type==="number"?"ltr":undefined}
                       value={incidentDraft[key]}
                       onChange={(e) =>
                         setIncidentDraft({ ...incidentDraft, [key]: e.target.value })
@@ -4711,7 +4734,7 @@ function FleetView({staff,centersData,onImported}:{staff:any[];centersData:any[]
       <form className="fleet-form" onSubmit={save}>
         <label>المركبة *<select value={vehicleId} required onChange={e=>{const id=e.target.value;const vehicle=data.vehicles.find((v:any)=>String(v.id)===id);const reading=id?String(Number(vehicle?.mileage_km||0)):"";setVehicleId(id);setDraft(p=>({...p,incidentId:"",kmStart:reading,kmEnd:"",odometerKm:reading}))}}><option value="">اختر المركبة</option>{data.vehicles.filter((v:any)=>v.active!==0).map((v:any)=><option key={v.id} value={v.id}>{v.plate_number} — {v.fuel_type||"وقود غير محدد"}</option>)}</select></label>
         <label>البلاغ المرتبط (اختياري)<select value={draft.incidentId||""} onChange={e=>set("incidentId",e.target.value)}><option value="">لا يوجد</option>{linked.map((i:any)=><option key={i.id} value={i.id}>{i.incident_number} — {i.call_date}</option>)}</select></label>
-        {tab==="fill"?<><label>تاريخ ووقت التعبئة *<input required type="datetime-local" lang="en-GB-u-hc-h23" dir="ltr" step="60" value={draft.filledAt||""} onChange={e=>set("filledAt",e.target.value)}/></label><label>الكمية (لتر) *<input required type="number" step="0.01" min="0.01" value={draft.liters||""} onChange={e=>set("liters",e.target.value)}/></label><label>عداد المركبة الحالي<input readOnly type="number" step="0.1" value={draft.odometerKm||""}/></label><label>المُعبّئ من دليل الموظفين (اختياري)<select value={draft.filledByStaffId||""} onChange={e=>set("filledByStaffId",e.target.value)}><option value="">المستخدم الحالي</option>{staff.map((s:any)=><option key={s.id} value={s.id}>{s.full_name}</option>)}</select></label><label>مصدر الوقود<input value={draft.sourceName||""} onChange={e=>set("sourceName",e.target.value)}/></label><label>رقم القسيمة<input value={draft.voucherNumber||""} onChange={e=>set("voucherNumber",e.target.value)}/></label></>:<><label>تاريخ ووقت الخروج *<input required type="datetime-local" lang="en-GB-u-hc-h23" dir="ltr" step="60" value={draft.departedAt||""} onChange={e=>set("departedAt",e.target.value)}/></label><label>تاريخ ووقت العودة<input type="datetime-local" lang="en-GB-u-hc-h23" dir="ltr" step="60" value={draft.returnedAt||""} onChange={e=>set("returnedAt",e.target.value)}/></label><label>عداد البداية (كم) *<input readOnly required type="number" step="0.1" value={draft.kmStart||""}/></label><label>عداد النهاية (كم)<input type="number" step="0.1" min={Number(selected?.mileage_km||0)} value={draft.kmEnd||""} onChange={e=>set("kmEnd",e.target.value)}/></label><label>الوجهة<input value={draft.destination||""} onChange={e=>set("destination",e.target.value)}/></label></>}
+        {tab==="fill"?<><label>تاريخ ووقت التعبئة *<DateTime24Input required value={draft.filledAt||""} onChange={value=>set("filledAt",value)}/></label><label>الكمية (لتر) *<input required type="number" step="0.01" min="0.01" value={draft.liters||""} onChange={e=>set("liters",e.target.value)}/></label><label>عداد المركبة الحالي<input readOnly type="number" step="0.1" value={draft.odometerKm||""}/></label><label>المُعبّئ من دليل الموظفين (اختياري)<select value={draft.filledByStaffId||""} onChange={e=>set("filledByStaffId",e.target.value)}><option value="">المستخدم الحالي</option>{staff.map((s:any)=><option key={s.id} value={s.id}>{s.full_name}</option>)}</select></label><label>مصدر الوقود<input value={draft.sourceName||""} onChange={e=>set("sourceName",e.target.value)}/></label><label>رقم القسيمة<input value={draft.voucherNumber||""} onChange={e=>set("voucherNumber",e.target.value)}/></label></>:<><label>تاريخ ووقت الخروج *<DateTime24Input required value={draft.departedAt||""} onChange={value=>set("departedAt",value)}/></label><label>تاريخ ووقت العودة<DateTime24Input value={draft.returnedAt||""} onChange={value=>set("returnedAt",value)}/></label><label>عداد البداية (كم) *<input readOnly required type="number" step="0.1" value={draft.kmStart||""}/></label><label>عداد النهاية (كم)<input type="number" step="0.1" min={Number(selected?.mileage_km||0)} value={draft.kmEnd||""} onChange={e=>set("kmEnd",e.target.value)}/></label><label>الوجهة<input value={draft.destination||""} onChange={e=>set("destination",e.target.value)}/></label></>}
         <label>السائق من دليل الموظفين<select value={draft.driverStaffId||""} onChange={e=>{const v=staff.find((x:any)=>String(x.id)===e.target.value);setDraft({...draft,driverStaffId:e.target.value,driverName:v?.full_name||draft.driverName||""})}}><option value="">غير موجود بالدليل</option>{staff.map((s:any)=><option key={s.id} value={s.id}>{s.full_name}</option>)}</select></label><label>اسم السائق<input value={draft.driverName||""} onChange={e=>set("driverName",e.target.value)}/></label><label>ملاحظات<input value={draft.notes||""} onChange={e=>set("notes",e.target.value)}/></label><button className="primary" disabled={busy}><Save/> حفظ {tab==="fill"?"التعبئة":"الحركة"}</button>
       </form></section>}
     {fleetSection==="vehicles"&&data.importReview?.length>0&&<section className="panel fleet-review"><PanelTitle icon={AlertTriangle} title="سجلات ملف الأسطول التي تحتاج مراجعة" subtitle="لا تُستورد تلقائيًا بسبب تعارض في البيانات"/>{data.importReview.map((x:any)=><p key={x.plate}><b>{x.plate}</b> — {x.reason}</p>)}</section>}
