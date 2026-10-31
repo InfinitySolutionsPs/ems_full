@@ -641,7 +641,7 @@ export default function HomePage() {
           />
         )}{" "}
         {view === "new" && (
-          <IncidentForm form={form} setField={setField} submit={submit} centers={settingsData.centers} stationsData={settingsData.stations} vehicles={settingsData.vehicles} settings={settingsData.settings} />
+          <IncidentForm form={form} setField={setField} submit={submit} centers={settingsData.centers} stationsData={settingsData.stations} vehicles={settingsData.vehicles} settings={settingsData.settings} isAdmin={currentRole === "admin"} />
         )}{" "}
         {view === "records" && (
           <Records
@@ -1068,6 +1068,7 @@ function IncidentForm({
   stationsData,
   vehicles,
   settings,
+  isAdmin,
 }: {
   form: Record<string, string>;
   setField: (k: string, v: string) => void;
@@ -1076,6 +1077,7 @@ function IncidentForm({
   stationsData: any[];
   vehicles: any[];
   settings: any[];
+  isAdmin: boolean;
 }) {
   const [emergencyEventOpen, setEmergencyEventOpen] = useState(Boolean(form.emergencyEventType));
   const selectedCenterId = Number(form.center || 0);
@@ -1084,7 +1086,7 @@ function IncidentForm({
   const availableVehicles = selectedCenterId
     ? (vehicles || []).filter((v:any) => v.active !== 0 && Number(v.center_id) === selectedCenterId)
     : [];
-  const selectableVehicles = availableVehicles.filter((v:any) => !v.odometer_blocking_incident);
+  const selectableVehicles = isAdmin ? availableVehicles : availableVehicles.filter((v:any) => !v.odometer_blocking_incident);
   const selectedVehicle = (vehicles || []).find((v:any)=>v.plate_number===form.vehicle);
   const incidentStatus = form.incidentStatus || "completed";
   const isCancelled = incidentStatus === "cancelled_before_dispatch" || incidentStatus === "cancelled_after_dispatch";
@@ -1345,7 +1347,7 @@ function IncidentForm({
                         : "لا توجد مركبات مرتبطة بالمركز"}
                 </option>
                 {availableVehicles.map((v: any) => (
-                  <option key={v.id} value={v.plate_number} disabled={Boolean(v.odometer_blocking_incident)}>
+                  <option key={v.id} value={v.plate_number} disabled={Boolean(v.odometer_blocking_incident) && !isAdmin}>
                     {v.plate_number} — {v.odometer_blocking_incident ? `محجوزة في البلاغ ${v.odometer_blocking_incident} (العداد غير مكتمل)` : v.fuel_type || "وقود غير محدد"}
                   </option>
                 ))}
@@ -1845,7 +1847,7 @@ function Records({
                   <option value="">{editCenterId ? "اختر المركبة..." : "اختر المركز أولًا"}</option>
                   {editVehicles.map((vehicle:any) => {
                     const blockedByOther = vehicle.odometer_blocking_incident && vehicle.odometer_blocking_incident !== selected?.incident_number;
-                    return <option key={vehicle.id} value={vehicle.plate_number} disabled={Boolean(blockedByOther)}>
+                    return <option key={vehicle.id} value={vehicle.plate_number} disabled={Boolean(blockedByOther) && !isAdmin}>
                       {vehicle.plate_number}{vehicle.active === 0 ? " — خارج الخدمة" : blockedByOther ? ` — محجوزة في البلاغ ${vehicle.odometer_blocking_incident}` : ""}
                     </option>;
                   })}
