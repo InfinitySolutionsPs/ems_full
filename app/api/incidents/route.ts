@@ -173,7 +173,7 @@ export async function POST(request: NextRequest) {
     const chosenVehicle = requiresMovement && body.vehicle ? await env.DB.prepare("SELECT v.id,v.mileage_km FROM vehicles v JOIN stations s ON s.center_id=v.center_id WHERE v.plate_number=? AND v.active=1 AND s.name=?").bind(body.vehicle,body.station).first<{id:number;mileage_km:number|null}>() : null;
     if (!isDraft && requiresMovement && body.vehicle && !chosenVehicle) return NextResponse.json({error:"المركبة لا تتبع المحطة المختارة أو أنها خارج الخدمة"},{status:400});
     kmStart=chosenVehicle?Number(chosenVehicle.mileage_km||0):0;
-    if (!isDraft && kmEnd!=null && (!Number.isFinite(kmEnd) || kmEnd<kmStart)) return NextResponse.json({error:"عداد النهاية يجب أن يساوي أو يزيد عن عداد المركبة الحالي"},{status:400});
+    if (kmEnd!=null && (!Number.isFinite(kmEnd) || kmEnd<kmStart)) return NextResponse.json({error:"عداد النهاية يجب أن يساوي أو يزيد عن عداد بداية البلاغ"},{status:400});
     const distanceKm=kmEnd==null?0:kmEnd-kmStart;
     const beneficiaries = [{...body}, ...additionalBeneficiaries];
     const groupCode = beneficiaries.length > 1 ? incidentCode : null;
@@ -203,7 +203,7 @@ export async function POST(request: NextRequest) {
     }
     const incidentId = created[0].id;
     if (body.previousIncidentCode) await env.DB.prepare("UPDATE incidents SET followup_incident_code=? WHERE incident_code=?").bind(incidentCode,body.previousIncidentCode).run();
-    if (!isDraft && chosenVehicle && kmEnd!=null) await env.DB.prepare("UPDATE vehicles SET mileage_km=? WHERE id=?").bind(kmEnd,chosenVehicle.id).run();
+    if (chosenVehicle && kmEnd!=null) await env.DB.prepare("UPDATE vehicles SET mileage_km=GREATEST(COALESCE(mileage_km,0),?) WHERE id=?").bind(kmEnd,chosenVehicle.id).run();
     if (!isDraft && requiresMovement && chosenVehicle && body.dispatchTime) await env.DB.prepare(`INSERT INTO vehicle_movements (vehicle_id,incident_id,driver_name,departed_at,returned_at,km_start,km_end,destination,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT (incident_id) WHERE incident_id IS NOT NULL DO UPDATE SET vehicle_id=EXCLUDED.vehicle_id,driver_name=EXCLUDED.driver_name,departed_at=EXCLUDED.departed_at,returned_at=EXCLUDED.returned_at,km_start=EXCLUDED.km_start,km_end=EXCLUDED.km_end,destination=EXCLUDED.destination,notes=EXCLUDED.notes,created_by=EXCLUDED.created_by`)
       .bind(chosenVehicle.id,incidentId,body.emtDriver||null,`${body.callDate}T${body.dispatchTime}`,body.returnTime?`${body.callDate}T${body.returnTime}`:null,kmStart,kmEnd,incidentStatus==="cancelled_after_dispatch"?body.returnLocation:(body.dropoffLocation||body.pickupLocation||null),incidentStatus==="cancelled_after_dispatch"?"حركة بلاغ ملغي بعد تحرك المركبة":"حركة مرتبطة ببلاغ",actor).run();
     return NextResponse.json(
@@ -272,8 +272,9 @@ export async function PATCH(request: NextRequest) {
   const kmEnd = body.kmEnd === "" || body.kmEnd == null ? null : Number(body.kmEnd);
   const chosenVehicle = requiresMovement && body.vehicle ? await env.DB.prepare("SELECT v.id,v.mileage_km FROM vehicles v JOIN stations s ON s.center_id=v.center_id WHERE v.plate_number=? AND s.name=?").bind(body.vehicle,body.station).first<{id:number;mileage_km:number|null}>() : null;
   if (submissionAction === "approve" && requiresMovement && body.vehicle && !chosenVehicle) return NextResponse.json({error:"المركبة لا تتبع المحطة المختارة"},{status:400});
-  kmStart=chosenVehicle?Number(chosenVehicle.mileage_km||0):0;
-  if (submissionAction === "approve" && kmEnd!=null && (!Number.isFinite(kmEnd) || kmEnd<kmStart)) return NextResponse.json({error:"عداد النهاية يجب أن يساوي أو يزيد عن عداد المركبة الحالي"},{status:400});
+  const sameVehicle = chosenVehicle && Number(current.vehicle_id) === Number(chosenVehicle.id);
+  kmStart=sameVehicle && current.km_start!=null ? Number(current.km_start) : chosenVehicle?Number(chosenVehicle.mileage_km||0):0;
+  if (kmEnd!=null && (!Number.isFinite(kmEnd) || kmEnd<kmStart)) return NextResponse.json({error:"عداد النهاية يجب أن يساوي أو يزيد عن عداد بداية البلاغ"},{status:400});
   const updates: [string,unknown][] = [
     ["incident_status",incidentStatus],["beneficiary_name",body.beneficiaryName],["gender",body.gender||""],["contact",body.contact],["age",body.age?Number(body.age):null],["urgency",body.urgency||""],["category",body.category||""],["case_type",body.caseType||""],
     ["pickup_type",requiresDelivery?body.pickupType:null],["pickup_location",requiresDelivery?body.pickupLocation:null],["pickup_governorate",requiresDelivery?(body.pickupGovernorate||""):""],["pickup_municipality",requiresDelivery?body.pickupMunicipality:null],["pickup_neighborhood",requiresDelivery?body.pickupNeighborhood:null],
@@ -289,7 +290,7 @@ export async function PATCH(request: NextRequest) {
   const changes = Object.fromEntries(updates.filter(([key,value])=>String(current[key]??"")!==String(clean(value)??"")).map(([key,value])=>[key,{before:current[key]??null,after:clean(value)??null}]));
   await env.DB.prepare(`UPDATE incidents SET ${updates.map(([k])=>`${k}=?`).join(",")},approval_status=?,approved_by=?,approved_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
     .bind(...updates.map(([,v])=>clean(v)),nextApprovalStatus,nextApprovalStatus==="approved"?actor:null,nextApprovalStatus==="approved"?new Date().toISOString():null,body.id).run();
-  if (submissionAction === "approve" && chosenVehicle && kmEnd!=null) await env.DB.prepare("UPDATE vehicles SET mileage_km=? WHERE id=?").bind(kmEnd,chosenVehicle.id).run();
+  if (chosenVehicle && kmEnd!=null) await env.DB.prepare("UPDATE vehicles SET mileage_km=GREATEST(COALESCE(mileage_km,0),?) WHERE id=?").bind(kmEnd,chosenVehicle.id).run();
   if (submissionAction === "approve" && !requiresMovement) await env.DB.prepare("DELETE FROM vehicle_movements WHERE incident_id=?").bind(body.id).run();
   else if (submissionAction === "approve" && chosenVehicle && body.dispatchTime) await env.DB.prepare(`INSERT INTO vehicle_movements (vehicle_id,incident_id,driver_name,departed_at,returned_at,km_start,km_end,destination,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT (incident_id) WHERE incident_id IS NOT NULL DO UPDATE SET vehicle_id=EXCLUDED.vehicle_id,driver_name=EXCLUDED.driver_name,departed_at=EXCLUDED.departed_at,returned_at=EXCLUDED.returned_at,km_start=EXCLUDED.km_start,km_end=EXCLUDED.km_end,destination=EXCLUDED.destination,notes=EXCLUDED.notes,created_by=EXCLUDED.created_by`)
     .bind(chosenVehicle.id,body.id,body.emtDriver||null,`${body.callDate}T${body.dispatchTime}`,body.returnTime?`${body.callDate}T${body.returnTime}`:null,kmStart,kmEnd,incidentStatus==="cancelled_after_dispatch"?body.returnLocation:(body.dropoffLocation||body.pickupLocation||null),incidentStatus==="cancelled_after_dispatch"?"حركة بلاغ ملغي بعد تحرك المركبة":"حركة مرتبطة ببلاغ",actor).run();
