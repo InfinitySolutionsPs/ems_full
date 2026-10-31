@@ -3,6 +3,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { getAccess, hasPermission } from "@/lib/access";
 
 const clean = (v: unknown) => (typeof v === "string" ? v.trim() : v);
+const incidentTimeFields = ["entryTime","callTime","dispatchTime","arrivalTime","hospitalTime","clearTime","returnTime"] as const;
+const normalizeTime24 = (value: unknown) => {
+  const raw = String(value ?? "").trim();
+  const twelveHour = raw.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+  if (!twelveHour) return raw;
+  let hour = Number(twelveHour[1]) % 12;
+  if (twelveHour[3].toUpperCase() === "PM") hour += 12;
+  return `${String(hour).padStart(2,"0")}:${twelveHour[2]}`;
+};
+const normalizeIncidentTimes = (body: Record<string,unknown>) => {
+  for (const field of incidentTimeFields) if (body[field] != null) body[field] = normalizeTime24(body[field]);
+};
+const invalidTimeField = (body: Record<string,unknown>) =>
+  incidentTimeFields.find(field => clean(body[field]) && !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(String(clean(body[field]))));
 const minutesBetween = (a?: string, b?: string) => {
   if (!a || !b) return 0;
   const [ah, am] = a.split(":").map(Number),
@@ -106,6 +120,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = (await request.json()) as Record<string, unknown>;
+  normalizeIncidentTimes(body);
   const access = await getAccess(request);
   const submissionAction = body.submissionAction === "approve" ? "approve" : "draft";
   const isDraft = submissionAction === "draft";
@@ -152,6 +167,8 @@ export async function POST(request: NextRequest) {
       { error: "يرجى استكمال الحقول الإلزامية", fields: missing },
       { status: 400 },
     );
+  if (!isDraft && invalidTimeField(body))
+    return NextResponse.json({ error: "يرجى إدخال الوقت بنظام 24 ساعة بصيغة HH:mm" }, { status: 400 });
   let additionalBeneficiaries: Record<string, unknown>[] = [];
   try {
     const value = typeof body.additionalBeneficiaries === "string" ? JSON.parse(body.additionalBeneficiaries) : body.additionalBeneficiaries;
@@ -237,6 +254,7 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   const body = (await request.json()) as Record<string, unknown>;
+  normalizeIncidentTimes(body);
   const access = await getAccess(request);
   const submissionAction = body.submissionAction === "approve" ? "approve" : "draft";
   const nextApprovalStatus = submissionAction === "approve" ? "approved" : "draft";
@@ -272,6 +290,7 @@ export async function PATCH(request: NextRequest) {
     if (requiresDelivery && String(body.dropoffType||"").startsWith("Hospital")) required.push("dropoffLocation");
     const missing = required.filter((key)=>!clean(body[key]));
     if (missing.length) return NextResponse.json({error:"يرجى استكمال الحقول الإلزامية قبل اعتماد البلاغ",fields:missing},{status:400});
+    if (invalidTimeField(body)) return NextResponse.json({error:"يرجى إدخال الوقت بنظام 24 ساعة بصيغة HH:mm"},{status:400});
   }
   let kmStart = 0;
   const kmEnd = body.kmEnd === "" || body.kmEnd == null ? null : Number(body.kmEnd);
