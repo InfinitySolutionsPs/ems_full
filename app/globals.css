@@ -2527,6 +2527,9 @@ tbody tr:hover {
 .beneficiary-card{border:1px solid #ead9dc;background:#fffafb;border-radius:16px;padding:16px}
 .beneficiary-card-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px;color:#9f142b}
 .beneficiary-card-head .ghost{padding:7px 11px;color:#b42318}
+.edit-beneficiaries{margin:18px 0;padding:18px;border:1px solid #ead9dc;border-radius:18px;background:#fffafb}
+.edit-beneficiaries .beneficiary-card-head h3{margin:0;color:#2f3036}
+.edit-beneficiaries .beneficiary-card-head p{margin:5px 0 0;color:#777;font-size:.88rem}
 .add-beneficiary{margin-top:14px;border-style:dashed!important;color:#b0162d!important}
 .emergency-event-actions{display:grid;gap:14px}
 .emergency-event-trigger{width:max-content;min-height:48px;border:1px dashed #d31736;border-radius:13px;padding:0 18px;background:#fff7f8;color:#b41430;font:inherit;font-weight:900;display:flex;align-items:center;gap:9px;cursor:pointer;transition:.2s}

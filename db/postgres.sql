@@ -46,6 +46,8 @@ CREATE TABLE IF NOT EXISTS incidents (
 -- CREATE TABLE IF NOT EXISTS does not add newly introduced columns.
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS incident_code TEXT;
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS incident_status TEXT NOT NULL DEFAULT 'completed';
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS coordination_type TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS companion_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS return_time TEXT;
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS return_location TEXT;
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS entry_time TEXT;

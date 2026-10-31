@@ -158,20 +158,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "يمكنك الإدخال لمحطات المركز المحدد في حسابك فقط" }, { status: 403 });
   }
   const incidentStatus = String(body.incidentStatus || "completed");
-  if (!["cancelled_before_dispatch", "cancelled_after_dispatch", "completed"].includes(incidentStatus))
+  if (!["cancelled_before_dispatch", "cancelled_after_dispatch", "completed", "coordination"].includes(incidentStatus))
     return NextResponse.json({ error: "حالة البلاغ غير صالحة" }, { status: 400 });
+  const coordinationType = String(body.coordinationType || "");
+  const coordinationTypes = ["yellow_line", "evacuation", "returnees"];
+  if (!isDraft && incidentStatus === "coordination" && !coordinationTypes.includes(coordinationType))
+    return NextResponse.json({ error: "يرجى اختيار نوع التنسيق" }, { status: 400 });
+  const requiresBeneficiary = !(incidentStatus === "coordination" && coordinationType === "returnees");
   const requiresMovement = incidentStatus !== "cancelled_before_dispatch";
   const requiresDelivery = incidentStatus === "completed";
+  let additionalBeneficiaries: Record<string, unknown>[] = [];
+  try {
+    const value = typeof body.additionalBeneficiaries === "string" ? JSON.parse(body.additionalBeneficiaries) : body.additionalBeneficiaries;
+    if (Array.isArray(value)) additionalBeneficiaries = value.filter((row): row is Record<string,unknown> => Boolean(row && typeof row === "object"));
+  } catch {
+    return NextResponse.json({ error: "بيانات المستفيدين الإضافيين غير صالحة" }, { status: 400 });
+  }
   const required = [
-    "gender",
-    "urgency",
-    "category",
-    "caseType",
     "shift",
     "station",
     "callDate",
     "callTime",
   ];
+  if (requiresBeneficiary) required.push("gender", "urgency", "category", "caseType");
   if (incidentStatus === "completed") required.push("pickupGovernorate");
   if (requiresMovement) required.push("vehicle");
   if (requiresMovement) required.push("kmEnd");
@@ -190,13 +199,6 @@ export async function POST(request: NextRequest) {
     );
   if (!isDraft && invalidTimeField(body))
     return NextResponse.json({ error: "يرجى إدخال الوقت بنظام 24 ساعة بصيغة HH:mm" }, { status: 400 });
-  let additionalBeneficiaries: Record<string, unknown>[] = [];
-  try {
-    const value = typeof body.additionalBeneficiaries === "string" ? JSON.parse(body.additionalBeneficiaries) : body.additionalBeneficiaries;
-    if (Array.isArray(value)) additionalBeneficiaries = value.filter((row): row is Record<string,unknown> => Boolean(row && typeof row === "object"));
-  } catch {
-    return NextResponse.json({ error: "بيانات المستفيدين الإضافيين غير صالحة" }, { status: 400 });
-  }
   if (!isDraft) {
     const invalidBeneficiary = additionalBeneficiaries.find((row) => !clean(row.gender) || !clean(row.urgency) || !clean(row.category) || !clean(row.caseType));
     if (invalidBeneficiary) return NextResponse.json({ error: "يرجى استكمال الحقول الإلزامية لكل مستفيد إضافي" }, { status: 400 });
@@ -226,7 +228,7 @@ export async function POST(request: NextRequest) {
       const number = index===0 ? incidentNumber : code;
       const complaint = beneficiary.chiefComplaint === "__other" ? beneficiary.chiefComplaintOther : beneficiary.chiefComplaint;
       const entries: [string, unknown][] = [
-        ["incident_number",number],["incident_code",code],["incident_group_code",groupCode],["beneficiary_sequence",index+1],["incident_status",incidentStatus],["beneficiary_name",beneficiary.beneficiaryName],["gender",beneficiary.gender||""],["contact",beneficiary.contact],["age",beneficiary.age?Number(beneficiary.age):null],
+        ["incident_number",number],["incident_code",code],["incident_group_code",groupCode],["beneficiary_sequence",index+1],["incident_status",incidentStatus],["coordination_type",incidentStatus==="coordination"?coordinationType:null],["companion_count",incidentStatus==="coordination"&&coordinationType==="evacuation"?Math.max(0,Number(beneficiary.companionCount||0)):0],["beneficiary_name",beneficiary.beneficiaryName],["gender",beneficiary.gender||""],["contact",beneficiary.contact],["age",beneficiary.age?Number(beneficiary.age):null],
         ["urgency",beneficiary.urgency||""],["category",beneficiary.category||""],["case_type",beneficiary.caseType||""],["pickup_type",requiresDelivery?body.pickupType:null],["pickup_location",requiresDelivery?body.pickupLocation:null],["pickup_governorate",requiresDelivery?(body.pickupGovernorate||""):""],
         ["pickup_municipality",requiresDelivery?body.pickupMunicipality:null],["pickup_neighborhood",requiresDelivery?body.pickupNeighborhood:null],["dropoff_type",requiresDelivery?body.dropoffType:null],["dropoff_location",requiresDelivery?body.dropoffLocation:null],
         ["shift",body.shift],["station",body.station],["vehicle",requiresMovement?body.vehicle:null],["vehicle_id",chosenVehicle?.id||null],["km_start",requiresMovement&&chosenVehicle?kmStart:null],["km_end",requiresMovement?kmEnd:null],["distance_km",index===0&&requiresMovement?distanceKm:0],
@@ -234,7 +236,7 @@ export async function POST(request: NextRequest) {
         ["hospital_date",requiresDelivery&&body.hospitalTime?body.callDate:null],["hospital_time",requiresDelivery?body.hospitalTime:null],["available_date",requiresMovement&&body.clearTime?body.callDate:null],["clear_time",requiresMovement?body.clearTime:null],["return_time",requiresMovement?body.returnTime:null],["return_location",incidentStatus==="cancelled_after_dispatch"?body.returnLocation:null],["response_minutes",responseMinutes],["service_minutes",serviceMinutes],
         ["dispatcher_primary",body.dispatcherPrimary],["dispatcher_secondary",body.dispatcherSecondary],["emt_driver",body.emtDriver],["emt_lead",body.emtLead],["emt_assist",body.emtAssist],
         ["crew",body.crew],["interventions",requiresDelivery?(beneficiary.interventions||body.interventions):null],["chief_complaint",requiresDelivery?complaint:null],["fuel_liters",index===0?Number(body.fuelLiters||0):0],["notes",body.notes],
-        ["emergency_event_type",body.emergencyEventType||null],["emergency_event_notes",body.emergencyEventNotes||null],["cancelled",incidentStatus==="completed"?0:1],
+        ["emergency_event_type",body.emergencyEventType||null],["emergency_event_notes",body.emergencyEventNotes||null],["cancelled",["cancelled_before_dispatch","cancelled_after_dispatch"].includes(incidentStatus)?1:0],
         ...["patientDeceased","conflictRelated","oxygen","bvm","airway","cpr","aed","drugs","woundCare","tourniquet","immobilization","cervicalCollar","glucoseCheck","splinting","delivery"].map((k)=>[k.replace(/[A-Z]/g,m=>`_${m.toLowerCase()}`), (k==="patientDeceased"&&beneficiary.category==="Martyr")||(k==="delivery"&&beneficiary.category==="Delivery")||beneficiary[k]||body[k]?1:0] as [string,unknown]),
         ["approval_status",isDraft?"draft":"approved"],["approved_by",isDraft?null:actor],["approved_at",isDraft?null:new Date().toISOString()],["data_quality_status","ok"],["created_by",actor],["created_by_user_id",access.profile?.id||null],
       ];
@@ -300,10 +302,24 @@ export async function PATCH(request: NextRequest) {
   const responseMinutes = minutesBetweenDates(body.callDate, body.dispatchTime || body.callTime, body.callDate, body.arrivalTime);
   const serviceMinutes = minutesBetweenDates(body.callDate, body.callTime, body.callDate, body.clearTime);
   const incidentStatus = String(body.incidentStatus || current.incident_status || "completed");
+  const coordinationType = String(body.coordinationType || current.coordination_type || "");
+  if (!["cancelled_before_dispatch", "cancelled_after_dispatch", "completed", "coordination"].includes(incidentStatus))
+    return NextResponse.json({ error: "حالة البلاغ غير صالحة" }, { status: 400 });
+  if (submissionAction === "approve" && incidentStatus === "coordination" && !["yellow_line", "evacuation", "returnees"].includes(coordinationType))
+    return NextResponse.json({ error: "يرجى اختيار نوع التنسيق" }, { status: 400 });
+  const requiresBeneficiary = !(incidentStatus === "coordination" && coordinationType === "returnees");
   const requiresMovement = incidentStatus !== "cancelled_before_dispatch";
   const requiresDelivery = incidentStatus === "completed";
+  let additionalBeneficiaries: Record<string, unknown>[] = [];
+  try {
+    const value = typeof body.additionalBeneficiaries === "string" ? JSON.parse(body.additionalBeneficiaries) : body.additionalBeneficiaries;
+    if (Array.isArray(value)) additionalBeneficiaries = value.filter((row): row is Record<string,unknown> => Boolean(row && typeof row === "object"));
+  } catch {
+    return NextResponse.json({ error: "بيانات المستفيدين الإضافيين غير صالحة" }, { status: 400 });
+  }
   if (submissionAction === "approve") {
-    const required = ["gender","urgency","category","caseType","shift","station","callDate","callTime"];
+    const required = ["shift","station","callDate","callTime"];
+    if (requiresBeneficiary) required.push("gender","urgency","category","caseType");
     if (incidentStatus === "completed") required.push("pickupGovernorate");
     if (requiresMovement) required.push("vehicle");
     if (requiresMovement) required.push("kmEnd");
@@ -311,6 +327,8 @@ export async function PATCH(request: NextRequest) {
     if (requiresDelivery && String(body.dropoffType||"").startsWith("Hospital")) required.push("dropoffLocation");
     const missing = required.filter((key)=>!clean(body[key]));
     if (missing.length) return NextResponse.json({error:"يرجى استكمال الحقول الإلزامية قبل اعتماد البلاغ",fields:missing},{status:400});
+    const invalidBeneficiary = additionalBeneficiaries.find((row) => !clean(row.gender) || !clean(row.urgency) || !clean(row.category) || !clean(row.caseType));
+    if (invalidBeneficiary) return NextResponse.json({ error: "يرجى استكمال الحقول الإلزامية لكل مستفيد إضافي" }, { status: 400 });
     if (invalidTimeField(body)) return NextResponse.json({error:"يرجى إدخال الوقت بنظام 24 ساعة بصيغة HH:mm"},{status:400});
   }
   let kmStart = 0;
@@ -327,7 +345,7 @@ export async function PATCH(request: NextRequest) {
   if (!Number.isFinite(kmStart) || kmStart<0) return NextResponse.json({error:"عداد البداية غير صالح"},{status:400});
   if (kmEnd!=null && (!Number.isFinite(kmEnd) || kmEnd<kmStart)) return NextResponse.json({error:"عداد النهاية يجب أن يساوي أو يزيد عن عداد بداية البلاغ"},{status:400});
   const updates: [string,unknown][] = [
-    ["incident_status",incidentStatus],["beneficiary_name",body.beneficiaryName],["gender",body.gender||""],["contact",body.contact],["age",body.age?Number(body.age):null],["urgency",body.urgency||""],["category",body.category||""],["case_type",body.caseType||""],
+    ["incident_status",incidentStatus],["coordination_type",incidentStatus==="coordination"?coordinationType:null],["companion_count",incidentStatus==="coordination"&&coordinationType==="evacuation"?Math.max(0,Number(body.companionCount||0)):0],["beneficiary_name",body.beneficiaryName],["gender",body.gender||""],["contact",body.contact],["age",body.age?Number(body.age):null],["urgency",body.urgency||""],["category",body.category||""],["case_type",body.caseType||""],
     ["pickup_type",requiresDelivery?body.pickupType:null],["pickup_location",requiresDelivery?body.pickupLocation:null],["pickup_governorate",requiresDelivery?(body.pickupGovernorate||""):""],["pickup_municipality",requiresDelivery?body.pickupMunicipality:null],["pickup_neighborhood",requiresDelivery?body.pickupNeighborhood:null],
     ["dropoff_type",requiresDelivery?body.dropoffType:null],["dropoff_location",requiresDelivery?body.dropoffLocation:null],["station",body.station],["shift",body.shift],["vehicle",requiresMovement?body.vehicle:null],["vehicle_id",requiresMovement?(chosenVehicle?.id||null):null],
     ["call_date",body.callDate],["call_time",body.callTime],["entry_time",body.entryTime||current.entry_time],["dispatch_date",requiresMovement&&body.dispatchTime?body.callDate:null],["dispatch_time",requiresMovement?body.dispatchTime:null],["on_scene_date",requiresMovement&&body.arrivalTime?body.callDate:null],["arrival_time",requiresMovement?body.arrivalTime:null],
@@ -335,12 +353,43 @@ export async function PATCH(request: NextRequest) {
     ["km_start",chosenVehicle?kmStart:null],["km_end",kmEnd],["distance_km",kmEnd==null?0:kmEnd-kmStart],["response_minutes",responseMinutes],["service_minutes",serviceMinutes],
     ["dispatcher_primary",body.dispatcherPrimary],["dispatcher_secondary",body.dispatcherSecondary],["emt_driver",body.emtDriver],["emt_lead",body.emtLead],["emt_assist",body.emtAssist],
     ["interventions",requiresDelivery?body.interventions:null],["chief_complaint",requiresDelivery?body.chiefComplaint:null],["fuel_liters",Number(body.fuelLiters||0)],["notes",body.notes],
-    ...["cancelled","patientDeceased","conflictRelated","oxygen","bvm","airway","cpr","aed","drugs","woundCare","tourniquet","immobilization","cervicalCollar","glucoseCheck","splinting","delivery"].map((k)=>[k.replace(/[A-Z]/g,m=>`_${m.toLowerCase()}`), (k==="patientDeceased"&&body.category==="Martyr")||(k==="delivery"&&body.category==="Delivery")||body[k]?1:0] as [string,unknown]),
+    ["cancelled",["cancelled_before_dispatch","cancelled_after_dispatch"].includes(incidentStatus)?1:0],
+    ...["patientDeceased","conflictRelated","oxygen","bvm","airway","cpr","aed","drugs","woundCare","tourniquet","immobilization","cervicalCollar","glucoseCheck","splinting","delivery"].map((k)=>[k.replace(/[A-Z]/g,m=>`_${m.toLowerCase()}`), (k==="patientDeceased"&&body.category==="Martyr")||(k==="delivery"&&body.category==="Delivery")||body[k]?1:0] as [string,unknown]),
   ];
   const actor = access.profile.full_name || access.profile.username || access.email || "مستخدم النظام";
   const changes = Object.fromEntries(updates.filter(([key,value])=>String(current[key]??"")!==String(clean(value)??"")).map(([key,value])=>[key,{before:current[key]??null,after:clean(value)??null}]));
   await env.DB.prepare(`UPDATE incidents SET ${updates.map(([k])=>`${k}=?`).join(",")},approval_status=?,approved_by=?,approved_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
     .bind(...updates.map(([,v])=>clean(v)),nextApprovalStatus,nextApprovalStatus==="approved"?actor:null,nextApprovalStatus==="approved"?new Date().toISOString():null,body.id).run();
+  const createdBeneficiaries: {id:number;code:string}[] = [];
+  if (additionalBeneficiaries.length) {
+    const groupCode = String(current.incident_group_code || current.incident_code || current.incident_number);
+    await env.DB.prepare("UPDATE incidents SET incident_group_code=? WHERE id=?").bind(groupCode,body.id).run();
+    const updated = await env.DB.prepare("SELECT * FROM incidents WHERE id=?").bind(body.id).first<Record<string,unknown>>();
+    if (!updated) return NextResponse.json({error:"تعذر قراءة البلاغ بعد التعديل"},{status:500});
+    const sequenceRow = await env.DB.prepare("SELECT COALESCE(MAX(beneficiary_sequence),1) max_sequence FROM incidents WHERE incident_group_code=? OR id=?").bind(groupCode,body.id).first<{max_sequence:number}>();
+    let sequence = Number(sequenceRow?.max_sequence || 1);
+    for (const beneficiary of additionalBeneficiaries) {
+      sequence += 1;
+      const code = await nextIncidentCode();
+      const clone: Record<string,unknown> = {...updated,
+        incident_number:code, incident_code:code, incident_group_code:groupCode, beneficiary_sequence:sequence,
+        beneficiary_name:beneficiary.beneficiaryName||null, gender:beneficiary.gender||"", contact:beneficiary.contact||null,
+        age:beneficiary.age?Number(beneficiary.age):null, urgency:beneficiary.urgency||"", category:beneficiary.category||"", case_type:beneficiary.caseType||"",
+        companion_count:incidentStatus==="coordination"&&coordinationType==="evacuation"?Math.max(0,Number(beneficiary.companionCount||0)):0,
+        chief_complaint:beneficiary.chiefComplaint||null, distance_km:0, fuel_liters:0,
+        patient_deceased:beneficiary.category==="Martyr"?1:0, delivery:beneficiary.category==="Delivery"?1:0,
+        source_import_key:null, source_incident_number:null, source_incident_code:null, import_batch:null,
+        created_at:new Date().toISOString(), updated_at:new Date().toISOString(), created_by:actor, created_by_user_id:access.profile.id,
+      };
+      delete clone.id;
+      const cloneEntries = Object.entries(clone);
+      const inserted = await env.DB.prepare(`INSERT INTO incidents (${cloneEntries.map(([key])=>key).join(",")}) VALUES (${cloneEntries.map(()=>"?").join(",")})`).bind(...cloneEntries.map(([,value])=>clean(value))).run();
+      const newId = Number(inserted.meta.last_row_id);
+      createdBeneficiaries.push({id:newId,code});
+      await env.DB.prepare("INSERT INTO audit_logs (actor,actor_user_id,action,entity_type,entity_id,details) VALUES (?,?,?,'incident',?,?)")
+        .bind(actor,access.profile.id,nextApprovalStatus==="approved"?"approve_create":"draft_create",String(newId),JSON.stringify({incidentNumber:code,groupCode,beneficiarySequence:sequence,createdFromIncident:current.incident_number})).run();
+    }
+  }
   if (submissionAction === "approve" && !requiresMovement) await env.DB.prepare("DELETE FROM vehicle_movements WHERE incident_id=?").bind(body.id).run();
   else if (submissionAction === "approve" && chosenVehicle && body.dispatchTime) await env.DB.prepare(`INSERT INTO vehicle_movements (vehicle_id,incident_id,driver_name,departed_at,returned_at,km_start,km_end,destination,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT (incident_id) WHERE incident_id IS NOT NULL DO UPDATE SET vehicle_id=EXCLUDED.vehicle_id,driver_name=EXCLUDED.driver_name,departed_at=EXCLUDED.departed_at,returned_at=EXCLUDED.returned_at,km_start=EXCLUDED.km_start,km_end=EXCLUDED.km_end,destination=EXCLUDED.destination,notes=EXCLUDED.notes,created_by=EXCLUDED.created_by`)
     .bind(chosenVehicle.id,body.id,body.emtDriver||null,`${body.callDate}T${body.dispatchTime}`,body.returnTime?`${body.callDate}T${body.returnTime}`:null,kmStart,kmEnd,incidentStatus==="cancelled_after_dispatch"?body.returnLocation:(body.dropoffLocation||body.pickupLocation||null),incidentStatus==="cancelled_after_dispatch"?"حركة بلاغ ملغي بعد تحرك المركبة":"حركة مرتبطة ببلاغ",actor).run();
@@ -351,7 +400,7 @@ export async function PATCH(request: NextRequest) {
   )
     .bind(actor,access.profile.id,nextApprovalStatus==="approved"?"update_approved":"update_draft",String(body.id),JSON.stringify({incidentNumber:current.incident_number,changes}))
     .run();
-  return NextResponse.json({ ok: true, approvalStatus: nextApprovalStatus });
+  return NextResponse.json({ ok: true, approvalStatus: nextApprovalStatus, createdCount: createdBeneficiaries.length, incidentCodes: createdBeneficiaries.map(row=>row.code) });
 }
 
 export async function DELETE(request: NextRequest) {

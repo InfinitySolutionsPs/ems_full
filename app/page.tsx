@@ -193,6 +193,8 @@ const emptyForm: Record<string, string> = {
   incidentNumber: "",
   incidentCode: "",
   incidentStatus: "completed",
+  coordinationType: "",
+  companionCount: "",
   entryTime: "",
   beneficiaryName: "",
   gender: "",
@@ -1085,7 +1087,9 @@ function IncidentForm({
   const selectableVehicles = availableVehicles.filter((v:any) => !v.odometer_blocking_incident);
   const selectedVehicle = (vehicles || []).find((v:any)=>v.plate_number===form.vehicle);
   const incidentStatus = form.incidentStatus || "completed";
-  const isCancelled = incidentStatus !== "completed";
+  const isCancelled = incidentStatus === "cancelled_before_dispatch" || incidentStatus === "cancelled_after_dispatch";
+  const isCoordination = incidentStatus === "coordination";
+  const requiresBeneficiary = !(isCoordination && form.coordinationType === "returnees");
   const requiresMovement = incidentStatus !== "cancelled_before_dispatch";
   const requiresDelivery = incidentStatus === "completed";
   const settingValues = (category:string) => (settings||[]).filter((x:any)=>x.category===category && x.value).map((x:any)=>String(x.value));
@@ -1174,14 +1178,16 @@ function IncidentForm({
           {select(
             "incidentStatus",
             "حالة البلاغ",
-            ["completed", "cancelled_before_dispatch", "cancelled_after_dispatch"],
+            ["completed", "coordination", "cancelled_before_dispatch", "cancelled_after_dispatch"],
             true,
             {
               completed: "عملية النقل مكتملة",
+              coordination: "تنسيق",
               cancelled_before_dispatch: "ملغي قبل تحرك المركبة",
               cancelled_after_dispatch: "ملغي بعد تحرك المركبة",
             },
           )}
+          {isCoordination && select("coordinationType", "نوع التنسيق", ["yellow_line", "evacuation", "returnees"], true, { yellow_line:"تنسيق الخط الأصفر", evacuation:"تنسيق إجلاء", returnees:"تنسيق عائدين" })}
           {field("callDate", "تاريخ البلاغ", "date", true)}
           <label>
             وقت إدخال البلاغ
@@ -1200,11 +1206,13 @@ function IncidentForm({
             ? "لن يطلب النظام بيانات المركبة أو الحركة أو تسليم الحالة."
             : incidentStatus === "cancelled_after_dispatch"
               ? "سيتم تسجيل بيانات الحركة والمركبة دون طلب بيانات تسليم الحالة للمستشفى."
-              : "سيتم تسجيل مسار البلاغ كاملًا حتى تسليم الحالة وعودة المركبة."}
+              : isCoordination
+                ? form.coordinationType === "returnees" ? "يمكن تسجيل تنسيق العائدين دون مستفيد، مع حفظ حركة المركبة والطاقم." : "سيتم تسجيل بيانات التنسيق وحركة المركبة والمستفيدين."
+                : "سيتم تسجيل مسار البلاغ كاملًا حتى تسليم الحالة وعودة المركبة."}
         </p>
       </FormSection>
 
-      <FormSection icon={Siren} title="تصنيف الحالة">
+      {requiresBeneficiary && <FormSection icon={Siren} title="تصنيف الحالة">
         <div className="form-grid cols-3">
           {select(
             "category",
@@ -1222,7 +1230,7 @@ function IncidentForm({
             urgencyArabic,
           )}
         </div>
-      </FormSection>
+      </FormSection>}
 
       {!isCancelled && <FormSection icon={MapPin} title="استلام الحالة وتسليمها">
         <div className="form-grid cols-4">
@@ -1384,7 +1392,7 @@ function IncidentForm({
         </FormSection>
       )}
 
-      <FormSection icon={UserRound} title="بيانات المستفيد">
+      <FormSection icon={UserRound} title={requiresBeneficiary ? "بيانات المستفيد" : "بيانات المستفيد (اختيارية)"}>
         <div className="form-grid cols-4">
           {field("beneficiaryName", "الاسم الكامل")}
           {select("gender", "الجنس", ["Male", "Female", "Unknown"], true, {
@@ -1394,6 +1402,7 @@ function IncidentForm({
           })}
           {field("age", "العمر", "number")}
           {field("contact", "رقم التواصل", "tel")}
+          {isCoordination && form.coordinationType === "evacuation" && field("companionCount", "عدد المرافقين", "number")}
         </div>
       </FormSection>
 
@@ -1407,6 +1416,7 @@ function IncidentForm({
               <label>الجنس <em>*</em><select required value={person.gender||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,gender:e.target.value}:x))}><option value="">اختر...</option><option value="Male">ذكر</option><option value="Female">أنثى</option><option value="Unknown">غير معروف</option></select></label>
               <label>العمر<input type="number" value={person.age||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,age:e.target.value}:x))}/></label>
               <label>رقم التواصل<input value={person.contact||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,contact:e.target.value}:x))}/></label>
+              {isCoordination&&form.coordinationType==="evacuation"&&<label>عدد المرافقين<input type="number" min="0" value={person.companionCount||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,companionCount:e.target.value}:x))}/></label>}
               <label>التصنيف <em>*</em><select required value={person.category||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,category:e.target.value,urgency:e.target.value==="Martyr"?"Black":x.urgency}:x))}><option value="">اختر...</option>{categories.map(x=><option key={x} value={x}>{categoryArabic[x]}</option>)}</select></label>
               <label>نوع الحالة <em>*</em><input required value={person.caseType||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,caseType:e.target.value}:x))}/></label>
               <label>درجة الأولوية <em>*</em><select required value={person.urgency||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,urgency:e.target.value}:x))}><option value="">اختر...</option>{["Red","Yellow","Green","Black","N/A"].map(x=><option key={x} value={x}>{urgencyArabic[x]}</option>)}</select></label>
@@ -1415,7 +1425,7 @@ function IncidentForm({
             </div>
           </div>)}
         </div>
-        <button type="button" className="ghost add-beneficiary" onClick={()=>setAdditional([...additionalBeneficiaries,{localId:crypto.randomUUID(),beneficiaryName:"",gender:"",age:"",contact:"",category:"",caseType:"",urgency:"",chiefComplaint:"",chiefComplaintOther:""}])}><PlusCircle/> إضافة مستفيد آخر</button>
+        <button type="button" className="ghost add-beneficiary" onClick={()=>setAdditional([...additionalBeneficiaries,{localId:crypto.randomUUID(),beneficiaryName:"",gender:"",age:"",contact:"",companionCount:"",category:"",caseType:"",urgency:"",chiefComplaint:"",chiefComplaintOther:""}])}><PlusCircle/> إضافة مستفيد آخر</button>
       </FormSection>
 
       {!isCancelled && <FormSection icon={Activity} title="التدخلات والملاحظات">
@@ -1597,6 +1607,9 @@ function Records({
     String(vehicle.center_id) === editCenterId &&
     (vehicle.active !== 0 || vehicle.plate_number === incidentDraft.vehicle)
   );
+  let editAdditionalBeneficiaries: any[] = [];
+  try { editAdditionalBeneficiaries = JSON.parse(incidentDraft.additionalBeneficiaries || "[]"); } catch { editAdditionalBeneficiaries = []; }
+  const setEditAdditionalBeneficiaries = (rows:any[]) => setIncidentDraft((draft:any)=>({...draft,additionalBeneficiaries:JSON.stringify(rows)}));
   const openIncident = (x: any) => {
     const incidentStation = (stationsData || []).find((station:any) => station.name === x.station);
     const incidentVehicle = (vehicles || []).find((vehicle:any) => vehicle.plate_number === x.vehicle);
@@ -1604,6 +1617,9 @@ function Records({
     setIncidentDraft({
       id: x.id,
       incidentStatus: x.incident_status || "completed",
+      coordinationType: x.coordination_type || "",
+      companionCount: x.companion_count || "",
+      additionalBeneficiaries: "[]",
       entryTime: x.entry_time || "",
       beneficiaryName: x.beneficiary_name || "",
       contact: x.contact || "",
@@ -1665,7 +1681,7 @@ function Records({
       .finally(onInitialIncidentHandled);
     return()=>controller.abort();
   },[initialIncidentId]);
-  const updateIncident = async (requestedAction?:"draft"|"approve") => { setSaving(true); try { const submissionAction=requestedAction||(selected?.approval_status==="approved"?"approve":"draft"); const r=await fetch("/api/incidents",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({...incidentDraft,submissionAction})}); const v=await r.json(); if(!r.ok) throw Error(v.error||"تعذر تعديل البلاغ"); toast.success(submissionAction==="approve"?"تم اعتماد البلاغ وحفظ بياناته":"تم حفظ المسودة بالوضع الحالي"); setSelected(null); setEditing(false); onRefresh(); } catch(e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setSaving(false); } };
+  const updateIncident = async (requestedAction?:"draft"|"approve") => { setSaving(true); try { const submissionAction=requestedAction||(selected?.approval_status==="approved"?"approve":"draft"); const r=await fetch("/api/incidents",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({...incidentDraft,submissionAction})}); const v=await r.json(); if(!r.ok) throw Error(v.error||"تعذر تعديل البلاغ"); const added=Number(v.createdCount||0); toast.success(`${submissionAction==="approve"?"تم اعتماد البلاغ وحفظ بياناته":"تم حفظ المسودة بالوضع الحالي"}${added?`، وإضافة ${added} مستفيد بكود مستقل`:""}`); setSelected(null); setEditing(false); onRefresh(); } catch(e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setSaving(false); } };
   const deleteIncident = async () => { if(!isAdmin || !selected) return; if(!window.confirm(`هل تريدين حذف البلاغ ${selected.incident_number} نهائيًا؟`)) return; setSaving(true); try { const r=await fetch(`/api/incidents?id=${selected.id}`,{method:"DELETE"}); const v=await r.json(); if(!r.ok) throw Error(v.error||"تعذر حذف البلاغ"); toast.success("تم حذف البلاغ"); setSelected(null); onRefresh(); } catch(e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setSaving(false); } };
   const mayEditSelected = !!selected && (selected.approval_status === "approved" ? canEditApproved : canEdit || (selected.approval_status === "draft" && Number(selected.created_by_user_id) === Number(currentUser?.id)));
   return (
@@ -1836,7 +1852,10 @@ function Records({
                 </select>
               </label>
               {[
+                ["incidentStatus", "حالة البلاغ", "select", [["completed","عملية النقل مكتملة"],["coordination","تنسيق"],["cancelled_before_dispatch","ملغي قبل التحرك"],["cancelled_after_dispatch","ملغي بعد التحرك"]]],
+                ...(incidentDraft.incidentStatus === "coordination" ? [["coordinationType", "نوع التنسيق", "select", [["yellow_line","تنسيق الخط الأصفر"],["evacuation","تنسيق إجلاء"],["returnees","تنسيق عائدين"]]]] : []),
                 ["beneficiaryName", "اسم المستفيد", "text"],
+                ...(incidentDraft.incidentStatus === "coordination" && incidentDraft.coordinationType === "evacuation" ? [["companionCount", "عدد المرافقين", "number"]] : []),
                 ["contact", "رقم التواصل", "text"],
                 [
                   "gender",
@@ -1927,6 +1946,24 @@ function Records({
                 </label>
               ))}
             </div>
+            {editing && <section className="edit-beneficiaries">
+              <div className="beneficiary-card-head"><div><h3>إضافة مستفيدين إلى نفس البلاغ</h3><p>يحصل كل مستفيد جديد على كود مستقل مع الاحتفاظ ببيانات الحركة والمركبة نفسها.</p></div></div>
+              <div className="beneficiary-list">{editAdditionalBeneficiaries.map((person:any,index:number)=><div className="beneficiary-card" key={person.localId||index}>
+                <div className="beneficiary-card-head"><b>مستفيد جديد {index+1}</b><button type="button" className="ghost" onClick={()=>setEditAdditionalBeneficiaries(editAdditionalBeneficiaries.filter((_:any,i:number)=>i!==index))}><Trash2/> حذف</button></div>
+                <div className="form-grid cols-4">
+                  <label>الاسم الكامل<input value={person.beneficiaryName||""} onChange={e=>setEditAdditionalBeneficiaries(editAdditionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,beneficiaryName:e.target.value}:x))}/></label>
+                  <label>الجنس<select value={person.gender||""} onChange={e=>setEditAdditionalBeneficiaries(editAdditionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,gender:e.target.value}:x))}><option value="">اختر...</option><option value="Male">ذكر</option><option value="Female">أنثى</option><option value="Unknown">غير معروف</option></select></label>
+                  <label>العمر<input type="number" value={person.age||""} onChange={e=>setEditAdditionalBeneficiaries(editAdditionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,age:e.target.value}:x))}/></label>
+                  <label>رقم التواصل<input value={person.contact||""} onChange={e=>setEditAdditionalBeneficiaries(editAdditionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,contact:e.target.value}:x))}/></label>
+                  {incidentDraft.incidentStatus==="coordination"&&incidentDraft.coordinationType==="evacuation"&&<label>عدد المرافقين<input type="number" min="0" value={person.companionCount||""} onChange={e=>setEditAdditionalBeneficiaries(editAdditionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,companionCount:e.target.value}:x))}/></label>}
+                  <label>التصنيف<select value={person.category||""} onChange={e=>setEditAdditionalBeneficiaries(editAdditionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,category:e.target.value,urgency:e.target.value==="Martyr"?"Black":x.urgency}:x))}><option value="">اختر...</option>{categories.map(x=><option key={x} value={x}>{categoryArabic[x]}</option>)}</select></label>
+                  <label>نوع الحالة<input value={person.caseType||""} onChange={e=>setEditAdditionalBeneficiaries(editAdditionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,caseType:e.target.value}:x))}/></label>
+                  <label>الأولوية<select value={person.urgency||""} onChange={e=>setEditAdditionalBeneficiaries(editAdditionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,urgency:e.target.value}:x))}><option value="">اختر...</option>{["Red","Yellow","Green","Black","N/A"].map(x=><option key={x} value={x}>{urgencyArabic[x]}</option>)}</select></label>
+                  <label>الشكوى الرئيسية<input value={person.chiefComplaint||""} onChange={e=>setEditAdditionalBeneficiaries(editAdditionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,chiefComplaint:e.target.value}:x))}/></label>
+                </div>
+              </div>)}</div>
+              <button type="button" className="ghost add-beneficiary" onClick={()=>setEditAdditionalBeneficiaries([...editAdditionalBeneficiaries,{localId:crypto.randomUUID(),beneficiaryName:"",gender:"",age:"",contact:"",companionCount:"",category:"",caseType:"",urgency:"",chiefComplaint:""}])}><PlusCircle/> إضافة مستفيد آخر</button>
+            </section>}
             <div className="check-grid modal-checks">
               {[["cancelled","بلاغ ملغي"],["patientDeceased","وفاة المستفيد"],["conflictRelated","مرتبط بالنزاع"],["oxygen","أكسجين"],["bvm","BVM"],["airway","مجرى هوائي"],["cpr","إنعاش CPR"],["aed","AED"],["drugs","أدوية"],["woundCare","عناية بالجروح"],["tourniquet","عاصبة"],["immobilization","تثبيت"],["cervicalCollar","طوق رقبة"],["glucoseCheck","فحص سكر"],["splinting","جبيرة"],["delivery","ولادة"]].map(([key,label])=>(
                 <label className="check-card" key={key}><input disabled={!editing} type="checkbox" checked={incidentDraft[key]==="1"} onChange={e=>setIncidentDraft({...incidentDraft,[key]:e.target.checked?"1":""})}/><span>{label}</span></label>
