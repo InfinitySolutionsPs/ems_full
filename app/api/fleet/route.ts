@@ -116,10 +116,12 @@ export async function POST(request: NextRequest) {
     let result;
     if (b.action === "fill") {
       const liters=number(b.liters), odometer=Number(vehicle.mileage_km||0);
-      if (!validDate(b.filledAt) || liters==null || !Number.isFinite(liters) || liters<=0 || !text(b.filledByName) || !["بنزين","سولار"].includes(text(b.fuelType))) return reply("يرجى إدخال تاريخ وكمية صحيحة واسم المُعبّئ وتحديد وقود السيارة في الإعدادات");
+      const fillerStaff = fillerId == null ? null : await env.DB.prepare("SELECT full_name FROM staff WHERE id=?").bind(fillerId).first<{full_name:string}>();
+      const filledByName = text(fillerStaff?.full_name) || access.profile.full_name || access.profile.username || access.email || "مستخدم النظام";
+      if (!validDate(b.filledAt) || liters==null || !Number.isFinite(liters) || liters<=0 || !["بنزين","سولار"].includes(text(b.fuelType))) return reply("يرجى إدخال تاريخ وكمية صحيحة وتحديد وقود السيارة في الإعدادات");
       if (vehicle.fuel_type && text(b.fuelType)!==vehicle.fuel_type) return reply("نوع الوقود لا يطابق بطاقة المركبة");
       result=await env.DB.prepare("INSERT INTO fuel_fillings (vehicle_id,incident_id,filled_at,liters,fuel_type,odometer_km,driver_staff_id,driver_name,filled_by_staff_id,filled_by_name,source_name,voucher_number,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-        .bind(vehicleId,incidentId,b.filledAt,liters,text(b.fuelType),odometer,staffId,text(b.driverName)||null,fillerId,text(b.filledByName),text(b.sourceName)||null,text(b.voucherNumber)||null,text(b.notes)||null,access.email).run();
+        .bind(vehicleId,incidentId,b.filledAt,liters,text(b.fuelType),odometer,staffId,text(b.driverName)||null,fillerId,filledByName,text(b.sourceName)||null,text(b.voucherNumber)||null,text(b.notes)||null,access.email).run();
     } else if (b.action === "movement") {
       if (!vehicle.active) return reply("المركبة خارج الخدمة؛ لا يمكن تسجيل حركة جديدة");
       const start=Number(vehicle.mileage_km||0),end=number(b.kmEnd);
