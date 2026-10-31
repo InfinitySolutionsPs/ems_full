@@ -657,6 +657,7 @@ export default function HomePage() {
             canEditApproved={can("incidents.edit_approved")}
             initialIncidentId={requestedIncidentId}
             onInitialIncidentHandled={()=>setRequestedIncidentId(null)}
+            modalOnly={false}
           />
         )}{" "}
         {view === "approvals" && (
@@ -686,7 +687,7 @@ export default function HomePage() {
         )}
         {view === "capacity" && <OperationalCapacity data={settingsData} />}
         {view === "coordination" && <CoordinationView />}
-        {view === "fleet" && <FleetView staff={settingsData.staff} centersData={settingsData.centers} onImported={loadAux} onOpenIncident={incidentId=>{setRequestedIncidentId(incidentId);setView("records")}} />}
+        {view === "fleet" && <><FleetView staff={settingsData.staff} centersData={settingsData.centers} onImported={loadAux} onOpenIncident={incidentId=>setRequestedIncidentId(incidentId)} /><Records incidents={incidents} loading={loading} onRefresh={()=>{refresh();loadAux();window.dispatchEvent(new Event("ems:fleet-refresh"))}} filters={filters} setFilters={setFilters} centers={settingsData.centers} stationsData={settingsData.stations} vehicles={settingsData.vehicles} isAdmin={currentRole==="admin"} currentUser={currentUser} canEdit={can("incidents.edit")} canEditApproved={can("incidents.edit_approved")} initialIncidentId={requestedIncidentId} onInitialIncidentHandled={()=>setRequestedIncidentId(null)} modalOnly /></>}
         {view === "maintenance" && <MaintenanceView onVehiclesChanged={loadAux} prefill={maintenancePrefill} />}
       </main>
     </div>
@@ -1554,6 +1555,7 @@ function Records({
   canEditApproved,
   initialIncidentId,
   onInitialIncidentHandled,
+  modalOnly=false,
 }: {
   incidents: Incident[];
   loading: boolean;
@@ -1569,6 +1571,7 @@ function Records({
   canEditApproved: boolean;
   initialIncidentId: number | null;
   onInitialIncidentHandled: () => void;
+  modalOnly?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const [recordFilters, setRecordFilters] = useState({ station:"all", shift:"all", urgency:"all", approval:"all" });
@@ -1666,7 +1669,7 @@ function Records({
   const deleteIncident = async () => { if(!isAdmin || !selected) return; if(!window.confirm(`هل تريدين حذف البلاغ ${selected.incident_number} نهائيًا؟`)) return; setSaving(true); try { const r=await fetch(`/api/incidents?id=${selected.id}`,{method:"DELETE"}); const v=await r.json(); if(!r.ok) throw Error(v.error||"تعذر حذف البلاغ"); toast.success("تم حذف البلاغ"); setSelected(null); onRefresh(); } catch(e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setSaving(false); } };
   const mayEditSelected = !!selected && (selected.approval_status === "approved" ? canEditApproved : canEdit || (selected.approval_status === "draft" && Number(selected.created_by_user_id) === Number(currentUser?.id)));
   return (
-    <div className="page-stack">
+    <div className={`page-stack ${modalOnly?"records-modal-only":""}`}>
       <section className="toolbar panel">
         <div className="search">
           <Search />
@@ -4719,6 +4722,7 @@ function FleetView({staff,centersData,onImported,onOpenIncident}:{staff:any[];ce
   const openVehicleProfile=async(vehicle:any)=>{setVehicleProfile(vehicle);setVehicleProfileData(null);setVehicleProfileTab("incidents");setVehicleProfileLoading(true);try{const r=await fetch(`/api/fleet?vehicleId=${vehicle.id}`);const body=await r.json();if(!r.ok)throw Error(body.error||"تعذر تحميل ملف المركبة");setVehicleProfileData(body)}catch(err){toast.error(String(err).replace(/^Error: /,""));setVehicleProfile(null)}finally{setVehicleProfileLoading(false)}};
   const deleteVehicle=async(vehicle:any)=>{if(!window.confirm(`هل تريدين حذف المركبة ${vehicle.plate_number} نهائيًا؟\n\nلن يسمح النظام بالحذف إذا كانت مرتبطة ببلاغ أو وقود أو حركة أو صيانة.`))return;setDeletingVehicleId(Number(vehicle.id));try{const r=await fetch("/api/settings",{method:"DELETE",headers:{"content-type":"application/json"},body:JSON.stringify({entity:"vehicle",id:vehicle.id})});const body=await r.json();if(!r.ok)throw Error(body.error||"تعذر حذف المركبة");if(String(vehicleId)===String(vehicle.id))setVehicleId("");if(Number(vehicleProfile?.id)===Number(vehicle.id))setVehicleProfile(null);toast.success(`تم حذف المركبة ${vehicle.plate_number}`);await load();onImported()}catch(err){toast.error(String(err).replace(/^Error: /,""))}finally{setDeletingVehicleId(null)}};
   useEffect(()=>{load()},[load]);
+  useEffect(()=>{const refreshFleet=()=>{void load();if(!vehicleProfile?.id)return;setVehicleProfileLoading(true);fetch(`/api/fleet?vehicleId=${vehicleProfile.id}`,{cache:"no-store"}).then(async response=>{const body=await response.json();if(!response.ok)throw Error(body.error||"تعذر تحديث ملف المركبة");setVehicleProfileData(body)}).catch(error=>toast.error(String(error).replace(/^Error: /,""))).finally(()=>setVehicleProfileLoading(false))};window.addEventListener("ems:fleet-refresh",refreshFleet);return()=>window.removeEventListener("ems:fleet-refresh",refreshFleet)},[load,vehicleProfile?.id]);
   const set=(k:string,v:string)=>setDraft(p=>({...p,[k]:v}));
   const save=async(e:React.FormEvent)=>{e.preventDefault();if(!vehicleId)return toast.error("اختر المركبة");setBusy(true);
     try {const r=await fetch("/api/fleet",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({action:tab,vehicleId:Number(vehicleId),...draft,fuelType:selected?.fuel_type})});const v=await r.json();if(!r.ok)throw Error(v.error);toast.success(tab==="fill"?"تم تسجيل التعبئة":"تم تسجيل الحركة");const reading=tab==="movement"&&draft.kmEnd?draft.kmEnd:String(Number(selected?.mileage_km||0));setDraft({filledAt:`${today}T09:00`,departedAt:`${today}T09:00`,kmStart:reading,odometerKm:reading});await load();}catch(err){toast.error(String(err).replace(/^Error: /,""))}finally{setBusy(false)}};

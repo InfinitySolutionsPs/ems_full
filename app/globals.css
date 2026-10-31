@@ -1190,6 +1190,8 @@ tbody tr:hover {
 .fleet-row-actions .employee-delete:disabled { opacity:.55; cursor:wait; }
 .vehicle-profile-link { border:0; background:transparent; color:#a9132f; padding:0; font:inherit; font-weight:900; cursor:pointer; text-decoration:underline; text-decoration-thickness:1px; text-underline-offset:4px; }
 .vehicle-profile-link:hover { color:#d01838; }
+.records-modal-only{display:contents}
+.records-modal-only>:not(.modal-backdrop){display:none!important}
 .vehicle-profile-backdrop { z-index:120; padding:24px; }
 .vehicle-profile-modal { width:min(1380px,calc(100vw - 48px)); max-height:92vh; overflow:hidden; display:flex; flex-direction:column; border:1px solid #eadfe2; border-radius:24px; background:#f7f8fa; box-shadow:0 28px 90px rgba(20,25,35,.28); }
 .vehicle-profile-head { display:flex; align-items:center; justify-content:space-between; gap:20px; padding:22px 26px; border-bottom:1px solid #ebe5e7; background:linear-gradient(110deg,#fff,#fff7f8); }
