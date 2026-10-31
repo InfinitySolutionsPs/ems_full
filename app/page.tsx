@@ -1684,7 +1684,8 @@ function Records({
     return()=>controller.abort();
   },[initialIncidentId]);
   const updateIncident = async (requestedAction?:"draft"|"approve") => { setSaving(true); try { const submissionAction=requestedAction||(selected?.approval_status==="approved"?"approve":"draft"); const r=await fetch("/api/incidents",{method:"PATCH",headers:{"content-type":"application/json"},body:JSON.stringify({...incidentDraft,submissionAction})}); const v=await r.json(); if(!r.ok) throw Error(v.error||"تعذر تعديل البلاغ"); const added=Number(v.createdCount||0); toast.success(`${submissionAction==="approve"?"تم اعتماد البلاغ وحفظ بياناته":"تم حفظ المسودة بالوضع الحالي"}${added?`، وإضافة ${added} مستفيد بكود مستقل`:""}`); setSelected(null); setEditing(false); onRefresh(); } catch(e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setSaving(false); } };
-  const deleteIncident = async () => { if(!isAdmin || !selected) return; if(!window.confirm(`هل تريدين حذف البلاغ ${selected.incident_number} نهائيًا؟`)) return; setSaving(true); try { const r=await fetch(`/api/incidents?id=${selected.id}`,{method:"DELETE"}); const v=await r.json(); if(!r.ok) throw Error(v.error||"تعذر حذف البلاغ"); toast.success("تم حذف البلاغ"); setSelected(null); onRefresh(); } catch(e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setSaving(false); } };
+  const deleteIncidentRecord = async (incident:any, closeModal=false) => { if(!isAdmin || !incident) return; if(!window.confirm(`هل تريدين حذف البلاغ ${incident.incident_number} نهائيًا؟ لا يمكن التراجع عن الحذف.`)) return; setSaving(true); try { const r=await fetch(`/api/incidents?id=${incident.id}`,{method:"DELETE"}); const v=await r.json(); if(!r.ok) throw Error(v.error||"تعذر حذف البلاغ"); toast.success(`تم حذف البلاغ ${incident.incident_number}`); if(closeModal)setSelected(null); onRefresh(); } catch(e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setSaving(false); } };
+  const deleteIncident = async () => { if(selected) await deleteIncidentRecord(selected,true); };
   const mayEditSelected = !!selected && (selected.approval_status === "approved" ? canEditApproved : canEdit || (selected.approval_status === "draft" && Number(selected.created_by_user_id) === Number(currentUser?.id)));
   return (
     <div className={`page-stack ${modalOnly?"records-modal-only":""}`}>
@@ -1759,14 +1760,15 @@ function Records({
                   <td>{String(x.station)}</td>
                   <td>{String(x.created_by || "—")}</td>
                   <td>{String(x.response_minutes || 0)} دقيقة</td>
-                  <td>
+                  <td><div className="row-actions record-row-actions">
                     <button
                       className="table-icon-action"
                       onClick={() => openIncident(x)}
                     >
                       <Eye /> فتح
                     </button>
-                  </td>
+                    {isAdmin && <button type="button" className="table-icon-action danger" disabled={saving} onClick={()=>void deleteIncidentRecord(x)}><Trash2/> حذف</button>}
+                  </div></td>
                 </tr>
               ))}
               {!rows.length && !loading && (
