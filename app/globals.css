@@ -2312,6 +2312,7 @@ tbody tr:hover {
 .maintenance-close, .maintenance-completed { border-top: 1px solid var(--line); padding-top: 18px; }
 .maintenance-close .maintenance-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 18px 0; }
 .maintenance-completed p { white-space: pre-wrap; }
+.maintenance-edit-closure { margin-top: 14px; }
 .maintenance-row-actions, .maintenance-close-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .maintenance-close-actions { justify-content: space-between; }
 @media (max-width: 1050px) { .maintenance-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); } .maintenance-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
