@@ -215,7 +215,7 @@ export async function POST(request: NextRequest) {
       (SELECT i.incident_number FROM incidents i WHERE i.vehicle_id=v.id AND i.approval_status='draft' AND COALESCE(i.beneficiary_sequence,1)=1 AND (i.km_start IS NULL OR i.km_end IS NULL OR i.km_end<i.km_start) ORDER BY i.updated_at DESC,i.id DESC LIMIT 1) odometer_blocking_incident
       FROM vehicles v JOIN stations s ON s.center_id=v.center_id WHERE v.plate_number=? AND v.active=1 AND s.name=?`).bind(body.vehicle,body.station).first<{id:number;mileage_km:number|null;odometer_blocking_incident:string|null}>() : null;
     if (requiresMovement && body.vehicle && !chosenVehicle) return NextResponse.json({error:"المركبة لا تتبع المحطة المختارة أو أنها خارج الخدمة"},{status:400});
-    if (chosenVehicle?.odometer_blocking_incident) return NextResponse.json({error:`المركبة مرتبطة بالبلاغ المفتوح ${chosenVehicle.odometer_blocking_incident}. أدخلي عداد النهاية الصحيح واحفظي البلاغ أولًا`},{status:409});
+    if (chosenVehicle?.odometer_blocking_incident && access.profile?.role !== "admin") return NextResponse.json({error:`المركبة مرتبطة بالبلاغ المفتوح ${chosenVehicle.odometer_blocking_incident}. أدخلي عداد النهاية الصحيح واحفظي البلاغ أولًا`},{status:409});
     kmStart=chosenVehicle?Number(chosenVehicle.mileage_km||0):0;
     if (kmEnd!=null && (!Number.isFinite(kmEnd) || kmEnd<kmStart)) return NextResponse.json({error:"عداد النهاية يجب أن يساوي أو يزيد عن عداد بداية البلاغ"},{status:400});
     const distanceKm=kmEnd==null?0:kmEnd-kmStart;
@@ -338,7 +338,7 @@ export async function PATCH(request: NextRequest) {
     (SELECT i.incident_number FROM incidents i WHERE i.vehicle_id=v.id AND i.id<>? AND i.approval_status='draft' AND COALESCE(i.beneficiary_sequence,1)=1 AND (i.km_start IS NULL OR i.km_end IS NULL OR i.km_end<i.km_start) ORDER BY i.updated_at DESC,i.id DESC LIMIT 1) odometer_blocking_incident
     FROM vehicles v JOIN stations s ON s.center_id=v.center_id WHERE v.plate_number=? AND s.name=?`).bind(body.id,body.vehicle,body.station).first<{id:number;mileage_km:number|null;odometer_blocking_incident:string|null}>() : null;
   if (submissionAction === "approve" && requiresMovement && body.vehicle && !chosenVehicle) return NextResponse.json({error:"المركبة لا تتبع المحطة المختارة"},{status:400});
-  if (chosenVehicle?.odometer_blocking_incident) return NextResponse.json({error:`المركبة مرتبطة بالبلاغ المفتوح ${chosenVehicle.odometer_blocking_incident}. يجب تصحيح عداد نهايته أولًا`},{status:409});
+  if (chosenVehicle?.odometer_blocking_incident && access.profile.role !== "admin") return NextResponse.json({error:`المركبة مرتبطة بالبلاغ المفتوح ${chosenVehicle.odometer_blocking_incident}. يجب تصحيح عداد نهايته أولًا`},{status:409});
   const sameVehicle = chosenVehicle && Number(current.vehicle_id) === Number(chosenVehicle.id);
   const mayCorrectApprovedOdometer = current.approval_status === "approved" && canEditApproved;
   kmStart=mayCorrectApprovedOdometer && requestedKmStart!=null ? requestedKmStart : sameVehicle && current.km_start!=null ? Number(current.km_start) : chosenVehicle?Number(chosenVehicle.mileage_km||0):0;
