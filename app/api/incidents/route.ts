@@ -138,8 +138,9 @@ export async function POST(request: NextRequest) {
   ];
   if (incidentStatus === "completed") required.push("pickupGovernorate");
   if (requiresMovement) required.push("vehicle");
+  if (requiresMovement) required.push("kmEnd");
   if (incidentStatus === "cancelled_after_dispatch")
-    required.push("dispatchTime", "returnTime", "returnLocation", "kmEnd");
+    required.push("dispatchTime", "returnTime", "returnLocation");
   if (
     requiresDelivery &&
     String(body.dropoffType || "").startsWith("Hospital")
@@ -170,8 +171,11 @@ export async function POST(request: NextRequest) {
   try {
     const incidentCode = String(clean(body.incidentCode) || await nextIncidentCode());
     const incidentNumber = String(clean(body.incidentNumber) || incidentCode);
-    const chosenVehicle = requiresMovement && body.vehicle ? await env.DB.prepare("SELECT v.id,v.mileage_km FROM vehicles v JOIN stations s ON s.center_id=v.center_id WHERE v.plate_number=? AND v.active=1 AND s.name=?").bind(body.vehicle,body.station).first<{id:number;mileage_km:number|null}>() : null;
-    if (!isDraft && requiresMovement && body.vehicle && !chosenVehicle) return NextResponse.json({error:"المركبة لا تتبع المحطة المختارة أو أنها خارج الخدمة"},{status:400});
+    const chosenVehicle = requiresMovement && body.vehicle ? await env.DB.prepare(`SELECT v.id,v.mileage_km,
+      (SELECT i.incident_number FROM incidents i WHERE i.vehicle_id=v.id AND i.approval_status='draft' AND COALESCE(i.beneficiary_sequence,1)=1 AND (i.km_start IS NULL OR i.km_end IS NULL OR i.km_end<i.km_start) ORDER BY i.updated_at DESC,i.id DESC LIMIT 1) odometer_blocking_incident
+      FROM vehicles v JOIN stations s ON s.center_id=v.center_id WHERE v.plate_number=? AND v.active=1 AND s.name=?`).bind(body.vehicle,body.station).first<{id:number;mileage_km:number|null;odometer_blocking_incident:string|null}>() : null;
+    if (requiresMovement && body.vehicle && !chosenVehicle) return NextResponse.json({error:"المركبة لا تتبع المحطة المختارة أو أنها خارج الخدمة"},{status:400});
+    if (chosenVehicle?.odometer_blocking_incident) return NextResponse.json({error:`المركبة مرتبطة بالبلاغ المفتوح ${chosenVehicle.odometer_blocking_incident}. أدخلي عداد النهاية الصحيح واحفظي البلاغ أولًا`},{status:409});
     kmStart=chosenVehicle?Number(chosenVehicle.mileage_km||0):0;
     if (kmEnd!=null && (!Number.isFinite(kmEnd) || kmEnd<kmStart)) return NextResponse.json({error:"عداد النهاية يجب أن يساوي أو يزيد عن عداد بداية البلاغ"},{status:400});
     const distanceKm=kmEnd==null?0:kmEnd-kmStart;
@@ -187,7 +191,7 @@ export async function POST(request: NextRequest) {
         ["incident_number",number],["incident_code",code],["incident_group_code",groupCode],["beneficiary_sequence",index+1],["incident_status",incidentStatus],["beneficiary_name",beneficiary.beneficiaryName],["gender",beneficiary.gender||""],["contact",beneficiary.contact],["age",beneficiary.age?Number(beneficiary.age):null],
         ["urgency",beneficiary.urgency||""],["category",beneficiary.category||""],["case_type",beneficiary.caseType||""],["pickup_type",requiresDelivery?body.pickupType:null],["pickup_location",requiresDelivery?body.pickupLocation:null],["pickup_governorate",requiresDelivery?(body.pickupGovernorate||""):""],
         ["pickup_municipality",requiresDelivery?body.pickupMunicipality:null],["pickup_neighborhood",requiresDelivery?body.pickupNeighborhood:null],["dropoff_type",requiresDelivery?body.dropoffType:null],["dropoff_location",requiresDelivery?body.dropoffLocation:null],
-        ["shift",body.shift],["station",body.station],["vehicle",requiresMovement?body.vehicle:null],["vehicle_id",chosenVehicle?.id||null],["km_start",requiresMovement?(kmStart||null):null],["km_end",requiresMovement?kmEnd:null],["distance_km",index===0&&requiresMovement?distanceKm:0],
+        ["shift",body.shift],["station",body.station],["vehicle",requiresMovement?body.vehicle:null],["vehicle_id",chosenVehicle?.id||null],["km_start",requiresMovement&&chosenVehicle?kmStart:null],["km_end",requiresMovement?kmEnd:null],["distance_km",index===0&&requiresMovement?distanceKm:0],
         ["call_date",body.callDate||new Date().toISOString().slice(0,10)],["call_time",body.callTime||""],["entry_time",body.entryTime||""],["dispatch_date",requiresMovement&&body.dispatchTime?body.callDate:null],["dispatch_time",requiresMovement?body.dispatchTime:null],["on_scene_date",requiresMovement&&body.arrivalTime?body.callDate:null],["arrival_time",requiresMovement?body.arrivalTime:null],
         ["hospital_date",requiresDelivery&&body.hospitalTime?body.callDate:null],["hospital_time",requiresDelivery?body.hospitalTime:null],["available_date",requiresMovement&&body.clearTime?body.callDate:null],["clear_time",requiresMovement?body.clearTime:null],["return_time",requiresMovement?body.returnTime:null],["return_location",incidentStatus==="cancelled_after_dispatch"?body.returnLocation:null],["response_minutes",responseMinutes],["service_minutes",serviceMinutes],
         ["dispatcher_primary",body.dispatcherPrimary],["dispatcher_secondary",body.dispatcherSecondary],["emt_driver",body.emtDriver],["emt_lead",body.emtLead],["emt_assist",body.emtAssist],
@@ -263,15 +267,19 @@ export async function PATCH(request: NextRequest) {
     const required = ["gender","urgency","category","caseType","shift","station","callDate","callTime"];
     if (incidentStatus === "completed") required.push("pickupGovernorate");
     if (requiresMovement) required.push("vehicle");
-    if (incidentStatus === "cancelled_after_dispatch") required.push("dispatchTime","returnTime","returnLocation","kmEnd");
+    if (requiresMovement) required.push("kmEnd");
+    if (incidentStatus === "cancelled_after_dispatch") required.push("dispatchTime","returnTime","returnLocation");
     if (requiresDelivery && String(body.dropoffType||"").startsWith("Hospital")) required.push("dropoffLocation");
     const missing = required.filter((key)=>!clean(body[key]));
     if (missing.length) return NextResponse.json({error:"يرجى استكمال الحقول الإلزامية قبل اعتماد البلاغ",fields:missing},{status:400});
   }
   let kmStart = 0;
   const kmEnd = body.kmEnd === "" || body.kmEnd == null ? null : Number(body.kmEnd);
-  const chosenVehicle = requiresMovement && body.vehicle ? await env.DB.prepare("SELECT v.id,v.mileage_km FROM vehicles v JOIN stations s ON s.center_id=v.center_id WHERE v.plate_number=? AND s.name=?").bind(body.vehicle,body.station).first<{id:number;mileage_km:number|null}>() : null;
+  const chosenVehicle = requiresMovement && body.vehicle ? await env.DB.prepare(`SELECT v.id,v.mileage_km,
+    (SELECT i.incident_number FROM incidents i WHERE i.vehicle_id=v.id AND i.id<>? AND i.approval_status='draft' AND COALESCE(i.beneficiary_sequence,1)=1 AND (i.km_start IS NULL OR i.km_end IS NULL OR i.km_end<i.km_start) ORDER BY i.updated_at DESC,i.id DESC LIMIT 1) odometer_blocking_incident
+    FROM vehicles v JOIN stations s ON s.center_id=v.center_id WHERE v.plate_number=? AND s.name=?`).bind(body.id,body.vehicle,body.station).first<{id:number;mileage_km:number|null;odometer_blocking_incident:string|null}>() : null;
   if (submissionAction === "approve" && requiresMovement && body.vehicle && !chosenVehicle) return NextResponse.json({error:"المركبة لا تتبع المحطة المختارة"},{status:400});
+  if (chosenVehicle?.odometer_blocking_incident) return NextResponse.json({error:`المركبة مرتبطة بالبلاغ المفتوح ${chosenVehicle.odometer_blocking_incident}. يجب تصحيح عداد نهايته أولًا`},{status:409});
   const sameVehicle = chosenVehicle && Number(current.vehicle_id) === Number(chosenVehicle.id);
   kmStart=sameVehicle && current.km_start!=null ? Number(current.km_start) : chosenVehicle?Number(chosenVehicle.mileage_km||0):0;
   if (kmEnd!=null && (!Number.isFinite(kmEnd) || kmEnd<kmStart)) return NextResponse.json({error:"عداد النهاية يجب أن يساوي أو يزيد عن عداد بداية البلاغ"},{status:400});

@@ -117,7 +117,15 @@ export async function GET(request:NextRequest) {
   const [centers, stations, vehicles, staff, settings] = await env.DB.batch([
     env.DB.prepare("SELECT * FROM centers ORDER BY name"),
     env.DB.prepare("SELECT s.*,c.name center_name FROM stations s LEFT JOIN centers c ON c.id=s.center_id ORDER BY s.name"),
-    env.DB.prepare("SELECT v.*,c.name center_name FROM vehicles v LEFT JOIN centers c ON c.id=v.center_id ORDER BY v.plate_number"),
+    env.DB.prepare(`SELECT v.*,c.name center_name,blocked.incident_number odometer_blocking_incident
+      FROM vehicles v LEFT JOIN centers c ON c.id=v.center_id
+      LEFT JOIN LATERAL (
+        SELECT i.incident_number FROM incidents i
+        WHERE i.vehicle_id=v.id AND i.approval_status='draft' AND COALESCE(i.beneficiary_sequence,1)=1
+          AND (i.km_start IS NULL OR i.km_end IS NULL OR i.km_end<i.km_start)
+        ORDER BY i.updated_at DESC,i.id DESC LIMIT 1
+      ) blocked ON TRUE
+      ORDER BY v.plate_number`),
     env.DB.prepare("SELECT s.*,c.name center_name FROM staff s LEFT JOIN centers c ON c.id=s.center_id ORDER BY s.full_name"),
     env.DB.prepare("SELECT * FROM system_settings ORDER BY category,key"),
   ]);
