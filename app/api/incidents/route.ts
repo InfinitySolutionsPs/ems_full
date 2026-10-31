@@ -40,6 +40,18 @@ async function nextIncidentCode() {
   return row.code;
 }
 
+async function syncVehicleOdometer(vehicleId: number) {
+  await env.DB.prepare(`UPDATE vehicles SET mileage_km=COALESCE((
+    SELECT reading FROM (
+      SELECT km_end AS reading, call_date || 'T' || COALESCE(return_time,clear_time,call_time,'00:00') AS occurred_at
+      FROM incidents WHERE vehicle_id=? AND km_end IS NOT NULL AND km_end>=COALESCE(km_start,0)
+      UNION ALL
+      SELECT km_end AS reading, COALESCE(returned_at,departed_at) AS occurred_at
+      FROM vehicle_movements WHERE vehicle_id=? AND km_end IS NOT NULL AND km_end>=km_start
+    ) readings ORDER BY occurred_at DESC LIMIT 1
+  ),mileage_km) WHERE id=?`).bind(vehicleId,vehicleId,vehicleId).run();
+}
+
 async function stationInUserCenter(profile: { role:string; station:string|null }, station: unknown, allowCenterPlaceholder=false) {
   if (profile.role !== "station_user") return true;
   const scope = String(profile.station || "").trim();
@@ -76,6 +88,15 @@ export async function GET(request: NextRequest) {
     }
   }
   if (!hasPermission(access.profile,"incidents.view")) return NextResponse.json({ error: "لا توجد صلاحية لعرض البلاغات" }, { status: 403 });
+  const requestedId = Number(url.searchParams.get("id") || 0);
+  if (url.searchParams.has("id")) {
+    if (!Number.isInteger(requestedId) || requestedId < 1) return NextResponse.json({error:"رقم البلاغ غير صالح"},{status:400});
+    const incident = await env.DB.prepare("SELECT * FROM incidents WHERE id=?").bind(requestedId).first<Record<string,unknown>>();
+    if (!incident) return NextResponse.json({error:"البلاغ غير موجود"},{status:404});
+    if (access.profile?.role === "station_user" && !(await stationInUserCenter(access.profile,incident.station,true)))
+      return NextResponse.json({error:"البلاغ خارج نطاق مركزك"},{status:403});
+    return NextResponse.json({incident},{headers:{"Cache-Control":"no-store, max-age=0"}});
+  }
   const from = url.searchParams.get("from") || "1900-01-01";
   const to = url.searchParams.get("to") || "2999-12-31";
   const governorate = url.searchParams.get("governorate") || "all";
@@ -293,6 +314,7 @@ export async function PATCH(request: NextRequest) {
     if (invalidTimeField(body)) return NextResponse.json({error:"يرجى إدخال الوقت بنظام 24 ساعة بصيغة HH:mm"},{status:400});
   }
   let kmStart = 0;
+  const requestedKmStart = body.kmStart === "" || body.kmStart == null ? null : Number(body.kmStart);
   const kmEnd = body.kmEnd === "" || body.kmEnd == null ? null : Number(body.kmEnd);
   const chosenVehicle = requiresMovement && body.vehicle ? await env.DB.prepare(`SELECT v.id,v.mileage_km,
     (SELECT i.incident_number FROM incidents i WHERE i.vehicle_id=v.id AND i.id<>? AND i.approval_status='draft' AND COALESCE(i.beneficiary_sequence,1)=1 AND (i.km_start IS NULL OR i.km_end IS NULL OR i.km_end<i.km_start) ORDER BY i.updated_at DESC,i.id DESC LIMIT 1) odometer_blocking_incident
@@ -300,7 +322,9 @@ export async function PATCH(request: NextRequest) {
   if (submissionAction === "approve" && requiresMovement && body.vehicle && !chosenVehicle) return NextResponse.json({error:"المركبة لا تتبع المحطة المختارة"},{status:400});
   if (chosenVehicle?.odometer_blocking_incident) return NextResponse.json({error:`المركبة مرتبطة بالبلاغ المفتوح ${chosenVehicle.odometer_blocking_incident}. يجب تصحيح عداد نهايته أولًا`},{status:409});
   const sameVehicle = chosenVehicle && Number(current.vehicle_id) === Number(chosenVehicle.id);
-  kmStart=sameVehicle && current.km_start!=null ? Number(current.km_start) : chosenVehicle?Number(chosenVehicle.mileage_km||0):0;
+  const mayCorrectApprovedOdometer = current.approval_status === "approved" && canEditApproved;
+  kmStart=mayCorrectApprovedOdometer && requestedKmStart!=null ? requestedKmStart : sameVehicle && current.km_start!=null ? Number(current.km_start) : chosenVehicle?Number(chosenVehicle.mileage_km||0):0;
+  if (!Number.isFinite(kmStart) || kmStart<0) return NextResponse.json({error:"عداد البداية غير صالح"},{status:400});
   if (kmEnd!=null && (!Number.isFinite(kmEnd) || kmEnd<kmStart)) return NextResponse.json({error:"عداد النهاية يجب أن يساوي أو يزيد عن عداد بداية البلاغ"},{status:400});
   const updates: [string,unknown][] = [
     ["incident_status",incidentStatus],["beneficiary_name",body.beneficiaryName],["gender",body.gender||""],["contact",body.contact],["age",body.age?Number(body.age):null],["urgency",body.urgency||""],["category",body.category||""],["case_type",body.caseType||""],
@@ -317,10 +341,11 @@ export async function PATCH(request: NextRequest) {
   const changes = Object.fromEntries(updates.filter(([key,value])=>String(current[key]??"")!==String(clean(value)??"")).map(([key,value])=>[key,{before:current[key]??null,after:clean(value)??null}]));
   await env.DB.prepare(`UPDATE incidents SET ${updates.map(([k])=>`${k}=?`).join(",")},approval_status=?,approved_by=?,approved_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
     .bind(...updates.map(([,v])=>clean(v)),nextApprovalStatus,nextApprovalStatus==="approved"?actor:null,nextApprovalStatus==="approved"?new Date().toISOString():null,body.id).run();
-  if (chosenVehicle && kmEnd!=null) await env.DB.prepare("UPDATE vehicles SET mileage_km=GREATEST(COALESCE(mileage_km,0),?) WHERE id=?").bind(kmEnd,chosenVehicle.id).run();
   if (submissionAction === "approve" && !requiresMovement) await env.DB.prepare("DELETE FROM vehicle_movements WHERE incident_id=?").bind(body.id).run();
   else if (submissionAction === "approve" && chosenVehicle && body.dispatchTime) await env.DB.prepare(`INSERT INTO vehicle_movements (vehicle_id,incident_id,driver_name,departed_at,returned_at,km_start,km_end,destination,notes,created_by) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT (incident_id) WHERE incident_id IS NOT NULL DO UPDATE SET vehicle_id=EXCLUDED.vehicle_id,driver_name=EXCLUDED.driver_name,departed_at=EXCLUDED.departed_at,returned_at=EXCLUDED.returned_at,km_start=EXCLUDED.km_start,km_end=EXCLUDED.km_end,destination=EXCLUDED.destination,notes=EXCLUDED.notes,created_by=EXCLUDED.created_by`)
     .bind(chosenVehicle.id,body.id,body.emtDriver||null,`${body.callDate}T${body.dispatchTime}`,body.returnTime?`${body.callDate}T${body.returnTime}`:null,kmStart,kmEnd,incidentStatus==="cancelled_after_dispatch"?body.returnLocation:(body.dropoffLocation||body.pickupLocation||null),incidentStatus==="cancelled_after_dispatch"?"حركة بلاغ ملغي بعد تحرك المركبة":"حركة مرتبطة ببلاغ",actor).run();
+  const affectedVehicleIds=[Number(current.vehicle_id||0),Number(chosenVehicle?.id||0)].filter((id,index,all)=>id>0&&all.indexOf(id)===index);
+  for (const vehicleId of affectedVehicleIds) await syncVehicleOdometer(vehicleId);
   await env.DB.prepare(
     "INSERT INTO audit_logs (actor,actor_user_id,action,entity_type,entity_id,details) VALUES (?,?,?,'incident',?,?)",
   )
