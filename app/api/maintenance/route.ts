@@ -141,6 +141,49 @@ export async function PATCH(request: NextRequest) {
   } catch { if (invoiceKey) await bucket().delete(invoiceKey).catch(() => undefined); return error("تعذر إغلاق الطلب؛ حالة المركبة لم تتغير", 500); }
 }
 
+export async function PUT(request: NextRequest) {
+  const access = await accessFor(request);
+  if (!access || !hasPermission(access.profile,"maintenance.manage")) return error("تعديل بيانات إغلاق طلب الصيانة غير مسموح", 403);
+  const form = await request.formData();
+  const id = Number(str(form.get("id")));
+  const performed = str(form.get("performedWork"));
+  const receiver = str(form.get("receivedBy"));
+  const receivedAt = str(form.get("receivedAt"));
+  const workshopName = str(form.get("workshopName"));
+  const workshopAddress = str(form.get("workshopAddress"));
+  const repairCost = Number(str(form.get("repairCostIls")));
+  if (!Number.isInteger(id) || id < 1 || !performed || !receiver || !date(receivedAt) || !workshopName || !workshopAddress || !Number.isFinite(repairCost) || repairCost < 0) return error("أكملي إجراءات الصيانة والتكلفة وبيانات الورشة والاستلام");
+  const invoice = form.get("invoice");
+  const invoiceFile = invoice instanceof File && invoice.size > 0 ? invoice : null;
+  if (invoiceFile && (invoiceFile.size > 10 * 1024 * 1024 || !["application/pdf", "image/jpeg", "image/png"].includes(invoiceFile.type))) return error("يجب أن تكون الفاتورة بصيغة PDF أو صورة JPG/PNG وبحجم لا يتجاوز 10 ميغابايت");
+  const invoiceBytes = invoiceFile ? await invoiceFile.arrayBuffer() : null;
+  if (invoiceFile && invoiceBytes) {
+    const header = new Uint8Array(invoiceBytes.slice(0, 8));
+    const valid = invoiceFile.type === "application/pdf" ? String.fromCharCode(...header.slice(0, 5)) === "%PDF-"
+      : invoiceFile.type === "image/jpeg" ? header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff
+        : [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => header[index] === byte);
+    if (!valid) return error("محتوى ملف الفاتورة لا يطابق نوع الملف المحدد");
+  }
+  const current = await env.DB.prepare("SELECT m.status,m.invoice_key,s.name station_name FROM vehicle_maintenance m JOIN stations s ON s.id=m.station_id WHERE m.id=?").bind(id).first<any>();
+  if (!current || current.status !== "closed") return error("الطلب غير موجود أو لم يُغلق بعد", 409);
+  if (access.profile?.role === "station_user" && current.station_name !== access.profile.station) return error("الطلب خارج نطاق محطتك", 403);
+  const newInvoiceKey = invoiceFile ? `maintenance-invoices/${crypto.randomUUID()}` : null;
+  try {
+    if (newInvoiceKey && invoiceBytes && invoiceFile) await bucket().put(newInvoiceKey, invoiceBytes, { httpMetadata: { contentType: invoiceFile.type } });
+    const [updated] = await env.DB.batch([
+      env.DB.prepare(`UPDATE vehicle_maintenance SET performed_work=?,repair_cost_ils=?,workshop_name=?,workshop_address=?,invoice_key=COALESCE(?,invoice_key),invoice_name=COALESCE(?,invoice_name),invoice_type=COALESCE(?,invoice_type),received_at=?,received_by=?,maintenance_recommendation=?,manager_recommendation=?,finance_recommendation=?,administrative_recommendation=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND status='closed'`)
+        .bind(performed,repairCost,workshopName,workshopAddress,newInvoiceKey,invoiceFile?.name||null,invoiceFile?.type||null,receivedAt,receiver,str(form.get("maintenanceRecommendation"))||null,str(form.get("managerRecommendation"))||null,str(form.get("financeRecommendation"))||null,str(form.get("administrativeRecommendation"))||null,id),
+      env.DB.prepare("INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,'update_close','maintenance',?,?)").bind(access.email,String(id),JSON.stringify({ repairCostIls: repairCost, workshopName, invoiceReplaced: Boolean(invoiceFile) })),
+    ]);
+    if (!updated.meta.changes) { if (newInvoiceKey) await bucket().delete(newInvoiceKey); return error("تعذر تحديث الطلب", 409); }
+    if (newInvoiceKey && current.invoice_key && current.invoice_key !== newInvoiceKey) await bucket().delete(String(current.invoice_key));
+    return NextResponse.json({ ok: true });
+  } catch {
+    if (newInvoiceKey) await bucket().delete(newInvoiceKey).catch(() => undefined);
+    return error("تعذر تحديث بيانات إغلاق الطلب", 500);
+  }
+}
+
 export async function DELETE(request: NextRequest) {
   const access = await accessFor(request);
   if (!access || !hasPermission(access.profile,"maintenance.manage")) return error("حذف طلب الصيانة غير مسموح", 403);
