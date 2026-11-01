@@ -36,3 +36,16 @@ export async function POST(request: NextRequest) {
   await env.DB.prepare("INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,'create','training',?,?)").bind(actor,String(trainingId),JSON.stringify({trainingName:name,trainingType:type})).run();
   return NextResponse.json({ ok: true, id: trainingId }, { status: 201 });
 }
+
+export async function DELETE(request: NextRequest) {
+  const access = await getAccess(request);
+  if (!hasPermission(access.profile, "training.manage")) return NextResponse.json({ error: "لا تملك صلاحية حذف التدريبات" }, { status: 403 });
+  const id = Number(new URL(request.url).searchParams.get("id"));
+  if (!Number.isInteger(id) || id <= 0) return NextResponse.json({ error: "رقم التدريب غير صالح" }, { status: 400 });
+  const existing = await env.DB.prepare("SELECT id,training_name FROM trainings WHERE id=?").bind(id).first<any>();
+  if (!existing) return NextResponse.json({ error: "التدريب غير موجود" }, { status: 404 });
+  const actor = access.profile?.full_name || access.profile?.username || access.email || "مستخدم النظام";
+  await env.DB.prepare("DELETE FROM trainings WHERE id=?").bind(id).run();
+  await env.DB.prepare("INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,'delete','training',?,?)").bind(actor,String(id),JSON.stringify({trainingName:existing.training_name})).run();
+  return NextResponse.json({ ok: true });
+}

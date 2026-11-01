@@ -2557,6 +2557,24 @@ tbody tr:hover {
 .training-day-attendance label input{width:14px!important;height:14px!important;margin:0!important;accent-color:#16834d}
 .training-daily-summary{display:flex;flex-wrap:wrap;gap:7px!important;margin-top:10px!important}
 .training-daily-summary span{background:#f4fbf6;border-color:#d5ecdc;color:#237247;font-weight:700}
+.training-row-actions{display:flex;align-items:center;justify-content:center;gap:6px;min-width:180px}
+.training-row-actions button,.training-modal-actions button{display:inline-flex;align-items:center;gap:5px;border-radius:9px;padding:7px 9px;font:inherit;font-size:11px;font-weight:800;cursor:pointer}
+.training-row-actions svg,.training-modal-actions svg{width:15px;height:15px}
+.training-details-button{border:1px solid #e4c2c9;background:#fff7f8;color:#a9132d}
+.training-delete-button{border:1px solid #f0c8ce;background:#fff;color:#b42318}
+.training-details-button:hover,.training-delete-button:hover{background:#c41734;color:#fff}
+.training-modal-backdrop{position:fixed;inset:0;z-index:80;display:grid;place-items:center;padding:20px;background:rgba(24,28,38,.42)}
+.training-details-modal{width:min(960px,100%);max-height:90vh;overflow:auto;background:#fff;border-radius:20px;box-shadow:0 24px 70px rgba(22,26,37,.25);padding:22px}
+.training-modal-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-bottom:14px;border-bottom:1px solid #edf0f3}
+.training-modal-head h3{margin:0;color:#a7132d;font-size:19px}.training-modal-head p{margin:4px 0 0;color:#727b88;font-size:12px}
+.training-detail-fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:16px}
+.training-detail-fields>div{display:grid;gap:4px;padding:11px 12px;border:1px solid #e6e9ee;border-radius:11px;background:#fafbfc}.training-detail-fields small{color:#7d8794;font-size:10px}.training-detail-fields b{font-size:12px;color:#28313c}
+.training-modal-attendance{margin-top:18px;padding-top:16px;border-top:1px solid #edf0f3}.training-modal-attendance h4{margin:0 0 11px;color:#353d49;font-size:14px}
+.training-modal-table{overflow-x:auto;border:1px solid #e7eaee;border-radius:12px}.training-modal-row{display:grid;grid-template-columns:minmax(220px,1.6fr) repeat(var(--training-days, 1),minmax(70px,1fr));min-width:430px;align-items:center;border-bottom:1px solid #edf0f3}.training-modal-row:last-child{border-bottom:0}.training-modal-row>*{padding:10px 9px;text-align:center;border-inline-start:1px solid #edf0f3;font-size:11px}.training-modal-row>*:first-child{text-align:right;border-inline-start:0}.training-modal-header{background:#fff7f8;color:#8e1228}.training-modal-row .present{color:#167b49;background:#f2fbf5;font-weight:800}.training-modal-row .absent{color:#b42318;background:#fff5f5;font-weight:800}
+.training-modal-actions{display:flex;justify-content:flex-start;gap:8px;margin-top:18px;padding-top:15px;border-top:1px solid #edf0f3}
+.training-modal-row{grid-template-columns:minmax(220px,1.6fr) repeat(10,minmax(70px,1fr))!important}
+@media(max-width:700px){.training-detail-fields{grid-template-columns:1fr 1fr}.training-row-actions{min-width:150px;flex-direction:column}.training-details-modal{padding:16px}}
+@media(max-width:480px){.training-detail-fields{grid-template-columns:1fr}}
 .training-attendance-details{margin-top:14px;border:1px solid #eee0e3;border-radius:12px;padding:12px;background:#fffafb}
 .training-attendance-details summary{cursor:pointer;font-weight:700;color:#8f1026}
 .training-attendance-details div{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
