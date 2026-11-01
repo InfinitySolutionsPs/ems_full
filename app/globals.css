@@ -2572,11 +2572,12 @@ tbody tr:hover {
 .training-modal-attendance{margin-top:18px;padding-top:16px;border-top:1px solid #edf0f3}.training-modal-attendance h4{margin:0 0 11px;color:#353d49;font-size:14px}
 .training-modal-table{overflow-x:auto;border:1px solid #e7eaee;border-radius:12px}.training-modal-row{display:grid;grid-template-columns:minmax(220px,1.6fr) repeat(var(--training-days, 1),minmax(70px,1fr));min-width:430px;align-items:center;border-bottom:1px solid #edf0f3}.training-modal-row:last-child{border-bottom:0}.training-modal-row>*{padding:10px 9px;text-align:center;border-inline-start:1px solid #edf0f3;font-size:11px}.training-modal-row>*:first-child{text-align:right;border-inline-start:0}.training-modal-header{background:#fff7f8;color:#8e1228}.training-modal-row .present{color:#167b49;background:#f2fbf5;font-weight:800}.training-modal-row .absent{color:#b42318;background:#fff5f5;font-weight:800}
 .training-modal-actions{display:flex;justify-content:flex-start;gap:8px;margin-top:18px;padding-top:15px;border-top:1px solid #edf0f3}
-.training-floating-edit{position:fixed;z-index:90;bottom:28px;left:32px;display:inline-flex;align-items:center;gap:7px;border:0;border-radius:11px;background:#c41734;color:#fff;padding:11px 16px;box-shadow:0 8px 20px rgba(196,23,52,.25);font:inherit;font-size:12px;font-weight:800;cursor:pointer}
+.training-floating-edit{position:fixed;z-index:90;bottom:108px;right:calc(50% - 440px);display:inline-flex;align-items:center;gap:7px;border:0;border-radius:11px;background:#c41734;color:#fff;padding:11px 16px;box-shadow:0 8px 20px rgba(196,23,52,.25);font:inherit;font-size:12px;font-weight:800;cursor:pointer}
 .training-floating-edit svg{width:16px;height:16px}
 .training-modal-row{grid-template-columns:minmax(220px,1.6fr) repeat(10,minmax(70px,1fr))!important}
 @media(max-width:700px){.training-detail-fields{grid-template-columns:1fr 1fr}.training-row-actions{min-width:150px;flex-direction:column}.training-details-modal{padding:16px}}
 @media(max-width:480px){.training-detail-fields{grid-template-columns:1fr}}
+@media(max-width:700px){.training-floating-edit{right:24px;bottom:92px}}
 .training-attendance-details{margin-top:14px;border:1px solid #eee0e3;border-radius:12px;padding:12px;background:#fffafb}
 .training-attendance-details summary{cursor:pointer;font-weight:700;color:#8f1026}
 .training-attendance-details div{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
