@@ -3418,6 +3418,7 @@ function TrainingView({ staff }: { staff: any[] }) {
   const [draft, setDraft] = useState<any>(empty);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const [attendance, setAttendance] = useState<Record<string, boolean>>({});
+  const [staffSearch, setStaffSearch] = useState("");
   const [records, setRecords] = useState<any[]>([]);
   const [attendees, setAttendees] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -3429,7 +3430,7 @@ function TrainingView({ staff }: { staff: any[] }) {
     try {
       const r = await fetch("/api/trainings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...draft, attendees: selectedAttendees }) });
       const v = await r.json(); if (!r.ok) throw Error(v.error || "تعذر حفظ التدريب");
-      toast.success("تم حفظ التدريب"); setDraft({ ...empty, trainingDate: today }); setSelected({}); setAttendance({}); await load();
+      toast.success("تم حفظ التدريب"); setDraft({ ...empty, trainingDate: today }); setSelected({}); setAttendance({}); setStaffSearch(""); await load();
     } catch (e) { toast.error(String(e).replace(/^Error: /,"")); }
   };
   const staffByTraining = (id: number) => attendees.filter(x => Number(x.training_id) === id);
@@ -3448,7 +3449,7 @@ function TrainingView({ staff }: { staff: any[] }) {
         <label>عدد ساعات التدريب<input type="number" min="0" value={draft.trainingHours} onChange={e=>setDraft({...draft,trainingHours:e.target.value})} /></label>
         {draft.trainingType === "community" && <label>عدد المتدربين<em>*</em><input required type="number" min="0" value={draft.traineeCount} onChange={e=>setDraft({...draft,traineeCount:e.target.value})} /></label>}
       </div>
-      {draft.trainingType === "staff" && <section className="training-attendees"><div className="user-section-title"><span>1</span><div><b>طاقم العمل المشارك</b><small>اختر الموظفين ثم حدد حضور كل مشارك</small></div></div><div className="training-staff-grid">{staff.filter(x=>x.active!==0).map(person=>{const id=String(person.id);return <label className={selected[id]?"selected":""} key={person.id}><input type="checkbox" checked={Boolean(selected[id])} onChange={e=>{setSelected({...selected,[id]:e.target.checked});if(e.target.checked&&attendance[id]===undefined)setAttendance({...attendance,[id]:true})}}/><span>{person.full_name}</span>{selected[id]&&<i><input type="checkbox" checked={attendance[id]!==false} onChange={e=>setAttendance({...attendance,[id]:e.target.checked})}/> حاضر</i>}</label>})}</div>{!staff.length&&<Empty/>}</section>}
+      {draft.trainingType === "staff" && <section className="training-attendees"><div className="user-section-title"><span>1</span><div><b>طاقم العمل المشارك</b><small>اختر الموظفين ثم حدد حضور كل مشارك</small></div></div><label className="training-staff-search"><Search/><input placeholder="ابحث باسم الموظف..." value={staffSearch} onChange={e=>setStaffSearch(e.target.value)} /></label><div className="training-staff-grid">{staff.filter(x=>x.active!==0 && String(x.full_name||"").toLowerCase().includes(staffSearch.trim().toLowerCase())).map(person=>{const id=String(person.id);return <label className={selected[id]?"selected":""} key={person.id}><input type="checkbox" checked={Boolean(selected[id])} onChange={e=>{setSelected({...selected,[id]:e.target.checked});if(e.target.checked&&attendance[id]===undefined)setAttendance({...attendance,[id]:true})}}/><span>{person.full_name}</span>{selected[id]&&<i><input type="checkbox" checked={attendance[id]!==false} onChange={e=>setAttendance({...attendance,[id]:e.target.checked})}/> حاضر</i>}</label>})}</div>{!staff.length&&<Empty/>}</section>}
       <div className="capacity-actions"><button className="primary"><Save/> حفظ التدريب</button></div>
     </form>
     <section className="panel table-panel"><PanelTitle icon={ClipboardList} title="التدريبات السابقة" subtitle={`${records.length} تدريب مسجل`} /><div className="table-wrap"><table><thead><tr><th>التاريخ</th><th>نوع التدريب</th><th>اسم التدريب</th><th>الجهة</th><th>الممول</th><th>المدرب</th><th>المتدربون</th><th>المكان</th><th>المدة</th><th>الحضور</th></tr></thead><tbody>{records.map(x=><tr key={x.id}><td>{x.training_date}</td><td>{x.training_type==="community"?"مجتمع محلي":"طاقم العمل"}</td><td><b>{x.training_name}</b></td><td>{x.training_agency||"—"}</td><td>{x.funder||"—"}</td><td>{x.trainer_name||"—"}</td><td>{x.trainee_count||0}</td><td>{x.location||"—"}</td><td>{x.training_days||0} يوم / {x.training_hours||0} ساعة</td><td>{x.training_type==="staff"?`${x.present_count||0} / ${x.attendees_count||0}`:"—"}</td></tr>)}{!records.length&&!loading&&<tr><td colSpan={10}><Empty/></td></tr>}</tbody></table>{loading&&<div className="loading-row">جاري تحميل التدريبات...</div>}</div>{records.filter(x=>x.training_type==="staff").map(x=><details className="training-attendance-details" key={`details-${x.id}`}><summary>تفاصيل حضور: {x.training_name}</summary><div>{staffByTraining(Number(x.id)).map(person=><span key={person.staff_id}>{person.full_name} — {person.attended?"حاضر":"غائب"}</span>)}</div></details>)}</section>
