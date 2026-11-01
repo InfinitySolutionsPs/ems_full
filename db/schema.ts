@@ -143,6 +143,28 @@ export const coordinations = sqliteTable("coordinations", {
   createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
   updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
 });
+export const trainings = sqliteTable("trainings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  trainingType: text("training_type").notNull(),
+  trainingName: text("training_name").notNull(),
+  trainingDate: text("training_date").notNull(),
+  trainingAgency: text("training_agency"),
+  funder: text("funder"),
+  trainerName: text("trainer_name"),
+  traineeCount: integer("trainee_count").notNull().default(0),
+  location: text("location"),
+  trainingDays: integer("training_days").notNull().default(0),
+  trainingHours: integer("training_hours").notNull().default(0),
+  createdBy: text("created_by"),
+  createdAt: text("created_at").notNull().default("CURRENT_TIMESTAMP"),
+  updatedAt: text("updated_at").notNull().default("CURRENT_TIMESTAMP"),
+});
+export const trainingAttendees = sqliteTable("training_attendees", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  trainingId: integer("training_id").notNull().references(() => trainings.id),
+  staffId: integer("staff_id").notNull().references(() => staff.id),
+  attended: integer("attended", { mode: "boolean" }).notNull().default(false),
+});
 export const incidents = sqliteTable("incidents", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   incidentNumber: text("incident_number").notNull().unique(),
