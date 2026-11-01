@@ -161,9 +161,13 @@ export async function POST(request: NextRequest) {
   if (!["cancelled_before_dispatch", "cancelled_after_dispatch", "completed", "coordination"].includes(incidentStatus))
     return NextResponse.json({ error: "حالة البلاغ غير صالحة" }, { status: 400 });
   const coordinationType = String(body.coordinationType || "");
+  const coordinationAgency = String(body.coordinationAgency || "");
   const coordinationTypes = ["yellow_line", "evacuation", "returnees"];
+  const coordinationAgencies = ["WHO", "OCHA", "red_cross", "other"];
   if (!isDraft && incidentStatus === "coordination" && !coordinationTypes.includes(coordinationType))
     return NextResponse.json({ error: "يرجى اختيار نوع التنسيق" }, { status: 400 });
+  if (!isDraft && incidentStatus === "coordination" && !coordinationAgencies.includes(coordinationAgency))
+    return NextResponse.json({ error: "يرجى اختيار جهة التنسيق" }, { status: 400 });
   const requiresBeneficiary = !(incidentStatus === "coordination" && coordinationType === "returnees");
   const requiresMovement = incidentStatus !== "cancelled_before_dispatch";
   const requiresDelivery = incidentStatus === "completed";
@@ -228,7 +232,7 @@ export async function POST(request: NextRequest) {
       const number = index===0 ? incidentNumber : code;
       const complaint = beneficiary.chiefComplaint === "__other" ? beneficiary.chiefComplaintOther : beneficiary.chiefComplaint;
       const entries: [string, unknown][] = [
-        ["incident_number",number],["incident_code",code],["incident_group_code",groupCode],["beneficiary_sequence",index+1],["incident_status",incidentStatus],["coordination_type",incidentStatus==="coordination"?coordinationType:null],["companion_count",incidentStatus==="coordination"&&coordinationType==="evacuation"?Math.max(0,Number(beneficiary.companionCount||0)):0],["beneficiary_name",beneficiary.beneficiaryName],["gender",beneficiary.gender||""],["contact",beneficiary.contact],["age",beneficiary.age?Number(beneficiary.age):null],
+        ["incident_number",number],["incident_code",code],["incident_group_code",groupCode],["beneficiary_sequence",index+1],["incident_status",incidentStatus],["coordination_type",incidentStatus==="coordination"?coordinationType:null],["coordination_agency",incidentStatus==="coordination"?coordinationAgency:null],["companion_count",incidentStatus==="coordination"&&coordinationType==="evacuation"?Math.max(0,Number(beneficiary.companionCount||0)):0],["beneficiary_name",beneficiary.beneficiaryName],["gender",beneficiary.gender||""],["contact",beneficiary.contact],["age",beneficiary.age?Number(beneficiary.age):null],
         ["urgency",beneficiary.urgency||""],["category",beneficiary.category||""],["case_type",beneficiary.caseType||""],["pickup_type",requiresDelivery?body.pickupType:null],["pickup_location",requiresDelivery?body.pickupLocation:null],["pickup_governorate",requiresDelivery?(body.pickupGovernorate||""):""],
         ["pickup_municipality",requiresDelivery?body.pickupMunicipality:null],["pickup_neighborhood",requiresDelivery?body.pickupNeighborhood:null],["dropoff_type",requiresDelivery?body.dropoffType:null],["dropoff_location",requiresDelivery?body.dropoffLocation:null],
         ["shift",body.shift],["station",body.station],["vehicle",requiresMovement?body.vehicle:null],["vehicle_id",chosenVehicle?.id||null],["km_start",requiresMovement&&chosenVehicle?kmStart:null],["km_end",requiresMovement?kmEnd:null],["distance_km",index===0&&requiresMovement?distanceKm:0],
@@ -303,10 +307,13 @@ export async function PATCH(request: NextRequest) {
   const serviceMinutes = minutesBetweenDates(body.callDate, body.callTime, body.callDate, body.clearTime);
   const incidentStatus = String(body.incidentStatus || current.incident_status || "completed");
   const coordinationType = String(body.coordinationType || current.coordination_type || "");
+  const coordinationAgency = String(body.coordinationAgency || current.coordination_agency || "");
   if (!["cancelled_before_dispatch", "cancelled_after_dispatch", "completed", "coordination"].includes(incidentStatus))
     return NextResponse.json({ error: "حالة البلاغ غير صالحة" }, { status: 400 });
   if (submissionAction === "approve" && incidentStatus === "coordination" && !["yellow_line", "evacuation", "returnees"].includes(coordinationType))
     return NextResponse.json({ error: "يرجى اختيار نوع التنسيق" }, { status: 400 });
+  if (submissionAction === "approve" && incidentStatus === "coordination" && !["WHO", "OCHA", "red_cross", "other"].includes(coordinationAgency))
+    return NextResponse.json({ error: "يرجى اختيار جهة التنسيق" }, { status: 400 });
   const requiresBeneficiary = !(incidentStatus === "coordination" && coordinationType === "returnees");
   const requiresMovement = incidentStatus !== "cancelled_before_dispatch";
   const requiresDelivery = incidentStatus === "completed";
@@ -345,7 +352,7 @@ export async function PATCH(request: NextRequest) {
   if (!Number.isFinite(kmStart) || kmStart<0) return NextResponse.json({error:"عداد البداية غير صالح"},{status:400});
   if (kmEnd!=null && (!Number.isFinite(kmEnd) || kmEnd<kmStart)) return NextResponse.json({error:"عداد النهاية يجب أن يساوي أو يزيد عن عداد بداية البلاغ"},{status:400});
   const updates: [string,unknown][] = [
-    ["incident_status",incidentStatus],["coordination_type",incidentStatus==="coordination"?coordinationType:null],["companion_count",incidentStatus==="coordination"&&coordinationType==="evacuation"?Math.max(0,Number(body.companionCount||0)):0],["beneficiary_name",body.beneficiaryName],["gender",body.gender||""],["contact",body.contact],["age",body.age?Number(body.age):null],["urgency",body.urgency||""],["category",body.category||""],["case_type",body.caseType||""],
+    ["incident_status",incidentStatus],["coordination_type",incidentStatus==="coordination"?coordinationType:null],["coordination_agency",incidentStatus==="coordination"?coordinationAgency:null],["companion_count",incidentStatus==="coordination"&&coordinationType==="evacuation"?Math.max(0,Number(body.companionCount||0)):0],["beneficiary_name",body.beneficiaryName],["gender",body.gender||""],["contact",body.contact],["age",body.age?Number(body.age):null],["urgency",body.urgency||""],["category",body.category||""],["case_type",body.caseType||""],
     ["pickup_type",requiresDelivery?body.pickupType:null],["pickup_location",requiresDelivery?body.pickupLocation:null],["pickup_governorate",requiresDelivery?(body.pickupGovernorate||""):""],["pickup_municipality",requiresDelivery?body.pickupMunicipality:null],["pickup_neighborhood",requiresDelivery?body.pickupNeighborhood:null],
     ["dropoff_type",requiresDelivery?body.dropoffType:null],["dropoff_location",requiresDelivery?body.dropoffLocation:null],["station",body.station],["shift",body.shift],["vehicle",requiresMovement?body.vehicle:null],["vehicle_id",requiresMovement?(chosenVehicle?.id||null):null],
     ["call_date",body.callDate],["call_time",body.callTime],["entry_time",body.entryTime||current.entry_time],["dispatch_date",requiresMovement&&body.dispatchTime?body.callDate:null],["dispatch_time",requiresMovement?body.dispatchTime:null],["on_scene_date",requiresMovement&&body.arrivalTime?body.callDate:null],["arrival_time",requiresMovement?body.arrivalTime:null],
@@ -373,6 +380,7 @@ export async function PATCH(request: NextRequest) {
       const code = await nextIncidentCode();
       const clone: Record<string,unknown> = {...updated,
         incident_number:code, incident_code:code, incident_group_code:groupCode, beneficiary_sequence:sequence,
+        coordination_agency:incidentStatus==="coordination"?coordinationAgency:null,
         beneficiary_name:beneficiary.beneficiaryName||null, gender:beneficiary.gender||"", contact:beneficiary.contact||null,
         age:beneficiary.age?Number(beneficiary.age):null, urgency:beneficiary.urgency||"", category:beneficiary.category||"", case_type:beneficiary.caseType||"",
         companion_count:incidentStatus==="coordination"&&coordinationType==="evacuation"?Math.max(0,Number(beneficiary.companionCount||0)):0,
