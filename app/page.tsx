@@ -194,6 +194,7 @@ const emptyForm: Record<string, string> = {
   incidentCode: "",
   incidentStatus: "completed",
   coordinationType: "",
+  coordinationAgency: "",
   companionCount: "",
   entryTime: "",
   beneficiaryName: "",
@@ -1190,6 +1191,7 @@ function IncidentForm({
             },
           )}
           {isCoordination && select("coordinationType", "نوع التنسيق", ["yellow_line", "evacuation", "returnees"], true, { yellow_line:"تنسيق الخط الأصفر", evacuation:"تنسيق إجلاء", returnees:"تنسيق عائدين" })}
+          {isCoordination && select("coordinationAgency", "جهة التنسيق", ["WHO", "OCHA", "red_cross", "other"], true, { WHO:"WHO", OCHA:"OCHA", red_cross:"الصليب الأحمر", other:"أخرى" })}
           {field("callDate", "تاريخ البلاغ", "date", true)}
           <label>
             وقت إدخال البلاغ
@@ -1620,6 +1622,7 @@ function Records({
       id: x.id,
       incidentStatus: x.incident_status || "completed",
       coordinationType: x.coordination_type || "",
+      coordinationAgency: x.coordination_agency || "",
       companionCount: x.companion_count || "",
       additionalBeneficiaries: "[]",
       entryTime: x.entry_time || "",
@@ -1858,6 +1861,7 @@ function Records({
               {[
                 ["incidentStatus", "حالة البلاغ", "select", [["completed","عملية النقل مكتملة"],["coordination","تنسيق"],["cancelled_before_dispatch","ملغي قبل التحرك"],["cancelled_after_dispatch","ملغي بعد التحرك"]]],
                 ...(incidentDraft.incidentStatus === "coordination" ? [["coordinationType", "نوع التنسيق", "select", [["yellow_line","تنسيق الخط الأصفر"],["evacuation","تنسيق إجلاء"],["returnees","تنسيق عائدين"]]]] : []),
+                ...(incidentDraft.incidentStatus === "coordination" ? [["coordinationAgency", "جهة التنسيق", "select", [["WHO","WHO"],["OCHA","OCHA"],["red_cross","الصليب الأحمر"],["other","أخرى"]]]] : []),
                 ["beneficiaryName", "اسم المستفيد", "text"],
                 ...(incidentDraft.incidentStatus === "coordination" && incidentDraft.coordinationType === "evacuation" ? [["companionCount", "عدد المرافقين", "number"]] : []),
                 ["contact", "رقم التواصل", "text"],

@@ -216,6 +216,7 @@ export const incidents = sqliteTable("incidents", {
   notes: text("notes"),
   incidentStatus: text("incident_status").notNull().default("completed"),
   coordinationType: text("coordination_type"),
+  coordinationAgency: text("coordination_agency"),
   companionCount: integer("companion_count").notNull().default(0),
   returnTime: text("return_time"),
   returnLocation: text("return_location"),

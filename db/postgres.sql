@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS incidents (
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS incident_code TEXT;
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS incident_status TEXT NOT NULL DEFAULT 'completed';
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS coordination_type TEXT;
+ALTER TABLE incidents ADD COLUMN IF NOT EXISTS coordination_agency TEXT;
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS companion_count INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS return_time TEXT;
 ALTER TABLE incidents ADD COLUMN IF NOT EXISTS return_location TEXT;
