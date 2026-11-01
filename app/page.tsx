@@ -499,7 +499,7 @@ export default function HomePage() {
     { id: "new", label: "تسجيل بلاغ", icon: PlusCircle, permission:"incidents.create" },
     { id: "records", label: "سجل البلاغات", icon: ClipboardList, permission:"incidents.view" },
     { id: "capacity", label: "القدرة التشغيلية", icon: Gauge, permission:"capacity.view" },
-    { id: "coordination", label: "إدخال التنسيقات", icon: Route, permission:"coordination.view" },
+    { id: "coordination", label: "التنسيقات", icon: Route, permission:"coordination.view" },
     { id: "fleet", label: "المركبات والوقود", icon: Ambulance, permission:"fleet.view" },
     { id: "maintenance", label: "صيانة المركبات", icon: Wrench, permission:"maintenance.view" },
     { id: "approvals", label: "اعتماد الإحصائيات", icon: ClipboardCheck, permission:"approvals.manage" },
@@ -3077,11 +3077,17 @@ function CoordinationView() {
     notes: "",
   };
   const [draft, setDraft] = useState<any>(empty);
+  const [incidentRecords, setIncidentRecords] = useState<any[]>([]);
   const load = useCallback(async () => {
-    const r = await fetch(
-      `/api/coordinations?from=${from}&to=${to}&agency=${encodeURIComponent(agency)}`,
-    );
-    if (r.ok) setData(await r.json());
+    const [coordinationResponse, incidentsResponse] = await Promise.all([
+      fetch(`/api/coordinations?from=${from}&to=${to}&agency=${encodeURIComponent(agency)}`),
+      fetch(`/api/incidents?from=${from}&to=${to}&incidentStatus=coordination`),
+    ]);
+    if (coordinationResponse.ok) setData(await coordinationResponse.json());
+    if (incidentsResponse.ok) {
+      const result = await incidentsResponse.json();
+      setIncidentRecords(result.incidents || []);
+    }
   }, [from, to, agency]);
   useEffect(() => {
     load();
@@ -3359,6 +3365,42 @@ function CoordinationView() {
             </tbody>
           </table>
           {!data.records.length && <Empty />}
+        </div>
+      </section>
+      <section className="panel table-panel">
+        <PanelTitle
+          icon={Route}
+          title="بلاغات التنسيق"
+          subtitle={`${incidentRecords.length} بلاغ تنسيق ضمن الفترة المحددة`}
+        />
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>كود البلاغ</th>
+                <th>التاريخ والوقت</th>
+                <th>جهة التنسيق</th>
+                <th>نوع التنسيق</th>
+                <th>المستفيد</th>
+                <th>المركز/المحطة</th>
+                <th>حالة الحفظ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {incidentRecords.map((x: any) => (
+                <tr key={x.id}>
+                  <td><b>{x.incident_code || x.incident_number}</b></td>
+                  <td><span className="latin-datetime">{x.call_date}<br />{x.call_time || "—"}</span></td>
+                  <td>{({ WHO:"WHO", OCHA:"OCHA", red_cross:"الصليب الأحمر", other:"أخرى" } as Record<string,string>)[String(x.coordination_agency)] || x.coordination_agency || "—"}</td>
+                  <td>{({ yellow_line:"تنسيق الخط الأصفر", evacuation:"تنسيق إجلاء", returnees:"تنسيق عائدين" } as Record<string,string>)[String(x.coordination_type)] || x.coordination_type || "—"}</td>
+                  <td>{x.beneficiary_name || "دون مستفيد"}</td>
+                  <td>{x.center_name || x.station || "—"}</td>
+                  <td><span className={`approval-status-badge ${x.approval_status === "draft" ? "draft" : "approved"}`}>{x.approval_status === "draft" ? "مسودة" : "معتمد"}</span></td>
+                </tr>
+              ))}
+              {!incidentRecords.length && <tr><td colSpan={7}><Empty /></td></tr>}
+            </tbody>
+          </table>
         </div>
       </section>
     </div>

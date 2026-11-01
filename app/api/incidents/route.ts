@@ -101,6 +101,7 @@ export async function GET(request: NextRequest) {
   const to = url.searchParams.get("to") || "2999-12-31";
   const governorate = url.searchParams.get("governorate") || "all";
   const category = url.searchParams.get("category") || "all";
+  const incidentStatus = url.searchParams.get("incidentStatus") || "all";
   let sql = "SELECT * FROM incidents WHERE call_date BETWEEN ? AND ?";
   const args: unknown[] = [from, to];
   if (governorate !== "all") {
@@ -110,6 +111,10 @@ export async function GET(request: NextRequest) {
   if (category !== "all") {
     sql += " AND category = ?";
     args.push(category);
+  }
+  if (incidentStatus !== "all") {
+    sql += " AND incident_status = ?";
+    args.push(incidentStatus);
   }
   if (access.profile?.role === "station_user") {
     const scope = String(access.profile.station || "").trim();
