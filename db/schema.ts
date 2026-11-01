@@ -165,6 +165,13 @@ export const trainingAttendees = sqliteTable("training_attendees", {
   staffId: integer("staff_id").notNull().references(() => staff.id),
   attended: integer("attended", { mode: "boolean" }).notNull().default(false),
 });
+export const trainingAttendance = sqliteTable("training_attendance", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  trainingId: integer("training_id").notNull().references(() => trainings.id),
+  staffId: integer("staff_id").notNull().references(() => staff.id),
+  trainingDay: integer("training_day").notNull(),
+  attended: integer("attended", { mode: "boolean" }).notNull().default(false),
+});
 export const incidents = sqliteTable("incidents", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   incidentNumber: text("incident_number").notNull().unique(),
