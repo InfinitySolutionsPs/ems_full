@@ -3436,7 +3436,9 @@ function TrainingView({ staff }: { staff: any[] }) {
     try {
       const r = await fetch(editingTrainingId ? "/api/trainings" : "/api/trainings", { method: editingTrainingId ? "PATCH" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...draft, id: editingTrainingId, attendees: selectedAttendees, dailyAttendance: daily }) });
       const v = await r.json(); if (!r.ok) throw Error(v.error || "تعذر حفظ التدريب");
-      toast.success(editingTrainingId ? "تم تحديث بيانات التدريب" : "تم حفظ التدريب"); setDraft({ ...empty, trainingDate: today }); setSelected({}); setAttendance({}); setDailyAttendance({}); setStaffSearch(""); setEditingTrainingId(null); setEditingTraining(false); if (editingTrainingId) setSelectedTraining(null); await load();
+      const wasEditing = editingTrainingId;
+      const updatedDetails = wasEditing ? { training_name: draft.trainingName, training_date: draft.trainingDate, training_agency: draft.trainingAgency, funder: draft.funder, trainer_name: draft.trainerName, location: draft.location, training_days: Number(draft.trainingDays || 0), training_hours: Number(draft.trainingHours || 0), training_type: draft.trainingType } : null;
+      toast.success(wasEditing ? "تم تحديث بيانات التدريب" : "تم حفظ التدريب"); setDraft({ ...empty, trainingDate: today }); setSelected({}); setAttendance({}); setDailyAttendance({}); setStaffSearch(""); setEditingTrainingId(null); setEditingTraining(false); if (wasEditing && updatedDetails) setSelectedTraining((current: any) => current ? { ...current, ...updatedDetails } : current); await load();
     } catch (e) { toast.error(String(e).replace(/^Error: /,"")); }
   };
   const staffByTraining = (id: number) => attendees.filter(x => Number(x.training_id) === id);
