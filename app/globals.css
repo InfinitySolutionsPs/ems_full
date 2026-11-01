@@ -2552,6 +2552,11 @@ tbody tr:hover {
 .training-staff-grid label>input{width:17px;height:17px;margin:0;accent-color:#c8102e}
 .training-staff-grid label i{margin-inline-start:auto;color:#16834d;font-size:.78rem;font-style:normal}
 .training-staff-grid label i input{width:16px;height:16px;margin-inline-start:4px;vertical-align:middle;accent-color:#16834d}
+.training-day-attendance{display:flex;flex-wrap:wrap;gap:5px;margin-inline-start:auto}
+.training-day-attendance label{display:inline-flex!important;align-items:center;gap:3px!important;padding:3px 6px!important;border:1px solid #dcefe3!important;border-radius:7px!important;background:#f4fbf6!important;color:#247447;font-size:10px!important;font-weight:700!important}
+.training-day-attendance label input{width:14px!important;height:14px!important;margin:0!important;accent-color:#16834d}
+.training-daily-summary{display:flex;flex-wrap:wrap;gap:7px!important;margin-top:10px!important}
+.training-daily-summary span{background:#f4fbf6;border-color:#d5ecdc;color:#237247;font-weight:700}
 .training-attendance-details{margin-top:14px;border:1px solid #eee0e3;border-radius:12px;padding:12px;background:#fffafb}
 .training-attendance-details summary{cursor:pointer;font-weight:700;color:#8f1026}
 .training-attendance-details div{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
