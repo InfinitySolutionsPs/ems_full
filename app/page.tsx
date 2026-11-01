@@ -22,6 +22,7 @@ import {
   FileBarChart,
   Filter,
   Gauge,
+  GraduationCap,
   HeartPulse,
   Home,
   History,
@@ -69,6 +70,7 @@ type View =
   | "records"
   | "capacity"
   | "coordination"
+  | "training"
   | "fleet"
   | "maintenance"
   | "approvals"
@@ -500,6 +502,7 @@ export default function HomePage() {
     { id: "records", label: "سجل البلاغات", icon: ClipboardList, permission:"incidents.view" },
     { id: "capacity", label: "القدرة التشغيلية", icon: Gauge, permission:"capacity.view" },
     { id: "coordination", label: "التنسيقات", icon: Route, permission:"coordination.view" },
+    { id: "training", label: "التدريب", icon: GraduationCap, permission:"training.view" },
     { id: "fleet", label: "المركبات والوقود", icon: Ambulance, permission:"fleet.view" },
     { id: "maintenance", label: "صيانة المركبات", icon: Wrench, permission:"maintenance.view" },
     { id: "approvals", label: "اعتماد الإحصائيات", icon: ClipboardCheck, permission:"approvals.manage" },
@@ -587,6 +590,8 @@ export default function HomePage() {
                       ? "توزيع الموظفين والمركبات على المراكز والورديات"
                       : view === "coordination"
                         ? "تسجيل عمليات التنسيق وحركة المرضى والمركبات"
+                        : view === "training"
+                          ? "إضافة التدريبات ومتابعة المشاركين والحضور"
                         : view === "fleet"
                           ? "تعبئة الوقود وحركة الأسطول وربطها بالبلاغات"
                           : view === "maintenance"
@@ -690,6 +695,7 @@ export default function HomePage() {
         )}
         {view === "capacity" && <OperationalCapacity data={settingsData} />}
         {view === "coordination" && <CoordinationView />}
+        {view === "training" && <TrainingView staff={settingsData.staff || []} />}
         {view === "fleet" && <><FleetView staff={settingsData.staff} centersData={settingsData.centers} onImported={loadAux} onOpenIncident={incidentId=>setRequestedIncidentId(incidentId)} /><Records incidents={incidents} loading={loading} onRefresh={()=>{refresh();loadAux();window.dispatchEvent(new Event("ems:fleet-refresh"))}} filters={filters} setFilters={setFilters} centers={settingsData.centers} stationsData={settingsData.stations} vehicles={settingsData.vehicles} isAdmin={currentRole==="admin"} currentUser={currentUser} canEdit={can("incidents.edit")} canEditApproved={can("incidents.edit_approved")} initialIncidentId={requestedIncidentId} onInitialIncidentHandled={()=>setRequestedIncidentId(null)} modalOnly /></>}
         {view === "maintenance" && <MaintenanceView onVehiclesChanged={loadAux} prefill={maintenancePrefill} />}
       </main>
@@ -2406,7 +2412,7 @@ function UsersView({ users, centers, reload }: { users: any[]; centers: any[]; r
     {title:"الرئيسية والتقارير",icon:BarChart3,items:[["dashboard.view","عرض لوحة المؤشرات والقوى العاملة"],["reports.view","عرض التقارير الدورية والمخصصة وتصدير Excel وPDF"]]},
     {title:"سجل البلاغات",icon:ClipboardList,items:[["incidents.view","عرض سجل بلاغات نطاق العمل"],["incidents.create","تسجيل بلاغ وحفظه كمسودة أو اعتماده وإضافة مستفيدين"],["incidents.edit","تعديل المسودات والبلاغات غير المعتمدة"],["incidents.edit_approved","تعديل البلاغات المعتمدة والمقفلة"],["incidents.delete","حذف البلاغات نهائيًا"]]},
     {title:"الرقابة والاعتماد",icon:ShieldCheck,items:[["approvals.manage","اعتماد الإحصائيات وإعادتها للتصحيح"],["audit.view","عرض سجل التعديلات وتفاصيل القيم قبل وبعد"]]},
-    {title:"القدرة التشغيلية والتنسيقات",icon:Gauge,items:[["capacity.view","عرض جدول القدرة التشغيلية والشفتات"],["capacity.manage","إضافة وتعديل تكليفات الموظفين والشفتات"],["coordination.view","عرض سجل التنسيقات"],["coordination.manage","إضافة وتعديل عمليات التنسيق"]]},
+    {title:"القدرة التشغيلية والتنسيقات والتدريب",icon:Gauge,items:[["capacity.view","عرض جدول القدرة التشغيلية والشفتات"],["capacity.manage","إضافة وتعديل تكليفات الموظفين والشفتات"],["coordination.view","عرض سجل التنسيقات"],["coordination.manage","إضافة وتعديل عمليات التنسيق"],["training.view","عرض سجل التدريبات"],["training.manage","إضافة التدريبات وتسجيل حضور المشاركين"]]},
     {title:"الأسطول والحركة والصيانة",icon:Ambulance,items:[["fleet.view","عرض المركبات والوقود وسجل الحركة"],["fleet.manage","إدارة المركبات وتسجيل الوقود والحركات والعدادات"],["maintenance.view","عرض طلبات صيانة المركبات"],["maintenance.manage","إضافة ومتابعة وإغلاق طلبات الصيانة"]]},
     {title:"إدارة النظام والمراجع",icon:Settings,items:[["settings.manage","إدارة المراكز والمحطات والموظفين والمركبات والمستشفيات والشكاوى"],["users.manage","إدارة المستخدمين والأدوار والصلاحيات"],["backup.manage","إنشاء وإدارة النسخ الاحتياطية وتنزيلها"]]},
   ];
@@ -3405,6 +3411,48 @@ function CoordinationView() {
       </section>
     </div>
   );
+}
+
+function TrainingView({ staff }: { staff: any[] }) {
+  const empty = { trainingType: "community", trainingName: "", trainingDate: today, trainingAgency: "", funder: "", trainerName: "", traineeCount: "", location: "", trainingDays: "", trainingHours: "" };
+  const [draft, setDraft] = useState<any>(empty);
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
+  const [attendance, setAttendance] = useState<Record<string, boolean>>({});
+  const [records, setRecords] = useState<any[]>([]);
+  const [attendees, setAttendees] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const load = useCallback(async () => { setLoading(true); try { const r = await fetch("/api/trainings", { cache: "no-store" }); const v = await r.json(); if (!r.ok) throw Error(v.error || "تعذر تحميل سجل التدريبات"); setRecords(v.trainings || []); setAttendees(v.attendees || []); } catch (e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setLoading(false); } }, []);
+  useEffect(() => { void load(); }, [load]);
+  const save = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const selectedAttendees = Object.entries(selected).filter(([, value]) => value).map(([staffId]) => ({ staffId: Number(staffId), attended: attendance[staffId] !== false }));
+    try {
+      const r = await fetch("/api/trainings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...draft, attendees: selectedAttendees }) });
+      const v = await r.json(); if (!r.ok) throw Error(v.error || "تعذر حفظ التدريب");
+      toast.success("تم حفظ التدريب"); setDraft({ ...empty, trainingDate: today }); setSelected({}); setAttendance({}); await load();
+    } catch (e) { toast.error(String(e).replace(/^Error: /,"")); }
+  };
+  const staffByTraining = (id: number) => attendees.filter(x => Number(x.training_id) === id);
+  return <div className="page-stack training-page">
+    <section className="form-hero"><div className="round-icon large"><GraduationCap /></div><div><h2>التدريب</h2><p>إضافة التدريبات السابقة ومتابعة مشاركة طاقم العمل والحضور</p></div></section>
+    <form className="panel training-form" onSubmit={save}><PanelTitle icon={GraduationCap} title="إضافة تدريب" subtitle="أدخل بيانات التدريب ثم سجله في السجل" />
+      <div className="form-grid cols-4">
+        <label>نوع التدريب<em>*</em><select required value={draft.trainingType} onChange={e=>{setDraft({...draft,trainingType:e.target.value});setSelected({});setAttendance({})}}><option value="community">تدريب مجتمع محلي</option><option value="staff">تدريب طاقم العمل</option></select></label>
+        <label>اسم التدريب<em>*</em><input required value={draft.trainingName} onChange={e=>setDraft({...draft,trainingName:e.target.value})} /></label>
+        <label>تاريخ التدريب<em>*</em><input required type="date" value={draft.trainingDate} onChange={e=>setDraft({...draft,trainingDate:e.target.value})} /></label>
+        <label>جهة التدريب<input value={draft.trainingAgency} onChange={e=>setDraft({...draft,trainingAgency:e.target.value})} /></label>
+        <label>الممول<input value={draft.funder} onChange={e=>setDraft({...draft,funder:e.target.value})} /></label>
+        <label>اسم المدرب<input value={draft.trainerName} onChange={e=>setDraft({...draft,trainerName:e.target.value})} /></label>
+        <label>مكان التدريب<input value={draft.location} onChange={e=>setDraft({...draft,location:e.target.value})} /></label>
+        <label>عدد أيام التدريب<input type="number" min="0" value={draft.trainingDays} onChange={e=>setDraft({...draft,trainingDays:e.target.value})} /></label>
+        <label>عدد ساعات التدريب<input type="number" min="0" value={draft.trainingHours} onChange={e=>setDraft({...draft,trainingHours:e.target.value})} /></label>
+        {draft.trainingType === "community" && <label>عدد المتدربين<em>*</em><input required type="number" min="0" value={draft.traineeCount} onChange={e=>setDraft({...draft,traineeCount:e.target.value})} /></label>}
+      </div>
+      {draft.trainingType === "staff" && <section className="training-attendees"><div className="user-section-title"><span>1</span><div><b>طاقم العمل المشارك</b><small>اختر الموظفين ثم حدد حضور كل مشارك</small></div></div><div className="training-staff-grid">{staff.filter(x=>x.active!==0).map(person=>{const id=String(person.id);return <label className={selected[id]?"selected":""} key={person.id}><input type="checkbox" checked={Boolean(selected[id])} onChange={e=>{setSelected({...selected,[id]:e.target.checked});if(e.target.checked&&attendance[id]===undefined)setAttendance({...attendance,[id]:true})}}/><span>{person.full_name}</span>{selected[id]&&<i><input type="checkbox" checked={attendance[id]!==false} onChange={e=>setAttendance({...attendance,[id]:e.target.checked})}/> حاضر</i>}</label>})}</div>{!staff.length&&<Empty/>}</section>}
+      <div className="capacity-actions"><button className="primary"><Save/> حفظ التدريب</button></div>
+    </form>
+    <section className="panel table-panel"><PanelTitle icon={ClipboardList} title="التدريبات السابقة" subtitle={`${records.length} تدريب مسجل`} /><div className="table-wrap"><table><thead><tr><th>التاريخ</th><th>نوع التدريب</th><th>اسم التدريب</th><th>الجهة</th><th>الممول</th><th>المدرب</th><th>المتدربون</th><th>المكان</th><th>المدة</th><th>الحضور</th></tr></thead><tbody>{records.map(x=><tr key={x.id}><td>{x.training_date}</td><td>{x.training_type==="community"?"مجتمع محلي":"طاقم العمل"}</td><td><b>{x.training_name}</b></td><td>{x.training_agency||"—"}</td><td>{x.funder||"—"}</td><td>{x.trainer_name||"—"}</td><td>{x.trainee_count||0}</td><td>{x.location||"—"}</td><td>{x.training_days||0} يوم / {x.training_hours||0} ساعة</td><td>{x.training_type==="staff"?`${x.present_count||0} / ${x.attendees_count||0}`:"—"}</td></tr>)}{!records.length&&!loading&&<tr><td colSpan={10}><Empty/></td></tr>}</tbody></table>{loading&&<div className="loading-row">جاري تحميل التدريبات...</div>}</div>{records.filter(x=>x.training_type==="staff").map(x=><details className="training-attendance-details" key={`details-${x.id}`}><summary>تفاصيل حضور: {x.training_name}</summary><div>{staffByTraining(Number(x.id)).map(person=><span key={person.staff_id}>{person.full_name} — {person.attended?"حاضر":"غائب"}</span>)}</div></details>)}</section>
+  </div>;
 }
 
 function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
