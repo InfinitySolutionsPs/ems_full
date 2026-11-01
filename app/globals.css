@@ -2530,17 +2530,29 @@ tbody tr:hover {
 .edit-beneficiaries{margin:18px 0;padding:18px;border:1px solid #ead9dc;border-radius:18px;background:#fffafb}
 .edit-beneficiaries .beneficiary-card-head h3{margin:0;color:#2f3036}
 .edit-beneficiaries .beneficiary-card-head p{margin:5px 0 0;color:#777;font-size:.88rem}
-.training-attendees{margin-top:22px;padding:18px;border:1px solid #ead9dc;border-radius:16px;background:#fffafb}
+.training-page{gap:18px}
+.training-page .form-hero{margin-bottom:0}
+.training-form{overflow:hidden;padding-bottom:0}
+.training-form>.panel-title{padding:20px 24px 16px;border-bottom:1px solid #f0e2e5;background:linear-gradient(135deg,#fff,#fffafb)}
+.training-form>.form-grid{padding:22px 24px 4px;grid-template-columns:repeat(4,minmax(0,1fr));gap:18px 16px}
+.training-form>.form-grid>label{display:flex;flex-direction:column;gap:7px;min-width:0;color:#424b59;font-size:12px;font-weight:800}
+.training-form>.form-grid>label em{color:#bd1732;font-style:normal;margin-inline-start:3px}
+.training-form>.form-grid>label input,.training-form>.form-grid>label select{width:100%;height:46px;min-width:0;margin:0;border:1px solid #dce1e8;border-radius:12px;background:#fff;padding:0 12px;color:#202733;outline:0;transition:.2s}
+.training-form>.form-grid>label input:focus,.training-form>.form-grid>label select:focus{border-color:#c41734;box-shadow:0 0 0 3px #fff0f2}
+.training-attendees{margin:18px 24px 0;padding:18px;border:1px solid #ead9dc;border-radius:16px;background:linear-gradient(135deg,#fffafb,#fff)}
 .training-staff-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:16px}
 .training-staff-grid label{display:flex;align-items:center;gap:9px;padding:11px 12px;border:1px solid #e4e4e8;border-radius:10px;background:#fff;cursor:pointer}
 .training-staff-grid label.selected{border-color:#cb1230;background:#fff0f3}
-.training-staff-grid label input{accent-color:#c8102e}
-.training-staff-grid label i{margin-inline-start:auto;color:#16834d;font-size:.78rem;font-style:normal}
+.training-staff-grid label>input{width:17px;height:17px;margin:0;accent-color:#c8102e}
+.training-staff-grid label i{margin-inline-start:auto;color:#16834d;font-size:.78rem;font-style:normal}\n.training-staff-grid label i input{width:16px;height:16px;margin-inline-start:4px;vertical-align:middle;accent-color:#16834d}
 .training-attendance-details{margin-top:14px;border:1px solid #eee0e3;border-radius:12px;padding:12px;background:#fffafb}
 .training-attendance-details summary{cursor:pointer;font-weight:700;color:#8f1026}
 .training-attendance-details div{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
 .training-attendance-details span{padding:6px 9px;border-radius:8px;background:#fff;border:1px solid #eee0e3}
-@media (max-width: 800px){.training-staff-grid{grid-template-columns:1fr}}
+.training-form>.capacity-actions{padding:18px 24px 22px;border-top:1px solid #f0f1f4;margin-top:18px;background:#fff}
+@media (max-width: 1100px){.training-form>.form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.training-staff-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width: 800px){.training-staff-grid{grid-template-columns:1fr}.training-form>.panel-title,.training-form>.form-grid{padding-inline:16px}.training-attendees{margin-inline:16px}.training-form>.capacity-actions{padding-inline:16px}}
+@media (max-width: 560px){.training-form>.form-grid{grid-template-columns:1fr}}
 .add-beneficiary{margin-top:14px;border-style:dashed!important;color:#b0162d!important}
 .emergency-event-actions{display:grid;gap:14px}
 .emergency-event-trigger{width:max-content;min-height:48px;border:1px dashed #d31736;border-radius:13px;padding:0 18px;background:#fff7f8;color:#b41430;font:inherit;font-weight:900;display:flex;align-items:center;gap:9px;cursor:pointer;transition:.2s}
