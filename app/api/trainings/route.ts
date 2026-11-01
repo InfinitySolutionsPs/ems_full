@@ -49,3 +49,25 @@ export async function DELETE(request: NextRequest) {
   await env.DB.prepare("INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,'delete','training',?,?)").bind(actor,String(id),JSON.stringify({trainingName:existing.training_name})).run();
   return NextResponse.json({ ok: true });
 }
+
+export async function PATCH(request: NextRequest) {
+  const access = await getAccess(request);
+  if (!hasPermission(access.profile, "training.manage")) return NextResponse.json({ error: "لا تملك صلاحية تعديل التدريبات" }, { status: 403 });
+  const body = await request.json() as Record<string, unknown>;
+  const id = Number(body.id);
+  if (!Number.isInteger(id) || id <= 0) return NextResponse.json({ error: "رقم التدريب غير صالح" }, { status: 400 });
+  const name = String(body.trainingName || "").trim();
+  const date = String(body.trainingDate || "").trim();
+  if (!name || !date) return NextResponse.json({ error: "يرجى استكمال اسم التدريب والتاريخ" }, { status: 400 });
+  const days = Math.max(0, Number(body.trainingDays || 0));
+  const attendees = Array.isArray(body.attendees) ? body.attendees.map((row:any)=>({staffId:Number(row.staffId),attended:Boolean(row.attended)})).filter((row:any)=>Number.isInteger(row.staffId)&&row.staffId>0) : [];
+  const daily = Array.isArray(body.dailyAttendance) ? body.dailyAttendance.map((row:any)=>({staffId:Number(row.staffId),day:Number(row.day),attended:Boolean(row.attended)})).filter((row:any)=>Number.isInteger(row.staffId)&&row.staffId>0&&Number.isInteger(row.day)&&row.day>0&&row.day<=days) : [];
+  await env.DB.prepare("UPDATE trainings SET training_name=?,training_date=?,training_agency=?,funder=?,trainer_name=?,trainee_count=?,location=?,training_days=?,training_hours=?,updated_at=CURRENT_TIMESTAMP WHERE id=?").bind(name,date,body.trainingAgency||null,body.funder||null,body.trainerName||null,body.trainingType==="staff"?attendees.length:Math.max(0,Number(body.traineeCount||0)),body.location||null,days,Math.max(0,Number(body.trainingHours||0)),id).run();
+  if (body.trainingType === "staff") {
+    for (const row of attendees) await env.DB.prepare("UPDATE training_attendees SET attended=? WHERE training_id=? AND staff_id=?").bind(row.attended?1:0,id,row.staffId).run();
+    for (const row of daily) await env.DB.prepare("INSERT INTO training_attendance (training_id,staff_id,training_day,attended) VALUES (?,?,?,?) ON CONFLICT (training_id,staff_id,training_day) DO UPDATE SET attended=EXCLUDED.attended").bind(id,row.staffId,row.day,row.attended?1:0).run();
+  }
+  const actor = access.profile?.full_name || access.profile?.username || access.email || "مستخدم النظام";
+  await env.DB.prepare("INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,'update','training',?,?)").bind(actor,String(id),JSON.stringify({trainingName:name})).run();
+  return NextResponse.json({ ok: true });
+}

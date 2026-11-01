@@ -3424,6 +3424,7 @@ function TrainingView({ staff }: { staff: any[] }) {
   const [attendees, setAttendees] = useState<any[]>([]);
   const [dailyRecords, setDailyRecords] = useState<any[]>([]);
   const [selectedTraining, setSelectedTraining] = useState<any | null>(null);
+  const [editingTrainingId, setEditingTrainingId] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const load = useCallback(async () => { setLoading(true); try { const r = await fetch("/api/trainings", { cache: "no-store" }); const v = await r.json(); if (!r.ok) throw Error(v.error || "تعذر تحميل سجل التدريبات"); setRecords(v.trainings || []); setAttendees(v.attendees || []); setDailyRecords(v.dailyAttendance || []); } catch (e) { toast.error(String(e).replace(/^Error: /,"")); } finally { setLoading(false); } }, []);
   useEffect(() => { void load(); }, [load]);
@@ -3432,9 +3433,9 @@ function TrainingView({ staff }: { staff: any[] }) {
     const selectedAttendees = Object.entries(selected).filter(([, value]) => value).map(([staffId]) => ({ staffId: Number(staffId), attended: attendance[staffId] !== false }));
     const daily = Object.entries(dailyAttendance).map(([key, value]) => { const [staffId, day] = key.split(":"); return { staffId: Number(staffId), day: Number(day), attended: value }; });
     try {
-      const r = await fetch("/api/trainings", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...draft, attendees: selectedAttendees, dailyAttendance: daily }) });
+      const r = await fetch(editingTrainingId ? "/api/trainings" : "/api/trainings", { method: editingTrainingId ? "PATCH" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...draft, id: editingTrainingId, attendees: selectedAttendees, dailyAttendance: daily }) });
       const v = await r.json(); if (!r.ok) throw Error(v.error || "تعذر حفظ التدريب");
-      toast.success("تم حفظ التدريب"); setDraft({ ...empty, trainingDate: today }); setSelected({}); setAttendance({}); setDailyAttendance({}); setStaffSearch(""); await load();
+      toast.success(editingTrainingId ? "تم تحديث بيانات التدريب" : "تم حفظ التدريب"); setDraft({ ...empty, trainingDate: today }); setSelected({}); setAttendance({}); setDailyAttendance({}); setStaffSearch(""); setEditingTrainingId(null); await load();
     } catch (e) { toast.error(String(e).replace(/^Error: /,"")); }
   };
   const staffByTraining = (id: number) => attendees.filter(x => Number(x.training_id) === id);
@@ -3445,6 +3446,15 @@ function TrainingView({ staff }: { staff: any[] }) {
     const v = await r.json();
     if (!r.ok) return toast.error(v.error || "تعذر حذف التدريب");
     toast.success("تم حذف التدريب"); setSelectedTraining(null); await load();
+  };
+  const editTraining = (training: any) => {
+    const selectedRows = staffByTraining(Number(training.id));
+    const selectedMap: Record<string, boolean> = {}; const attendanceMap: Record<string, boolean> = {};
+    selectedRows.forEach(row => { selectedMap[String(row.staff_id)] = true; attendanceMap[String(row.staff_id)] = Boolean(row.attended); });
+    const dailyMap: Record<string, boolean> = {};
+    dailyByTraining(Number(training.id)).forEach(row => { dailyMap[`${row.staff_id}:${row.training_day}`] = Boolean(row.attended); });
+    setDraft({ trainingType: training.training_type, trainingName: training.training_name || "", trainingDate: training.training_date || today, trainingAgency: training.training_agency || "", funder: training.funder || "", trainerName: training.trainer_name || "", traineeCount: training.trainee_count || "", location: training.location || "", trainingDays: training.training_days || "", trainingHours: training.training_hours || "" });
+    setSelected(selectedMap); setAttendance(attendanceMap); setDailyAttendance(dailyMap); setEditingTrainingId(Number(training.id)); setSelectedTraining(null); window.scrollTo({ top: 0, behavior: "smooth" });
   };
   return <div className="page-stack training-page">
     <section className="form-hero"><div className="round-icon large"><GraduationCap /></div><div><h2>التدريب</h2><p>إضافة التدريبات السابقة ومتابعة مشاركة طاقم العمل والحضور</p></div></section>
@@ -3466,6 +3476,7 @@ function TrainingView({ staff }: { staff: any[] }) {
     </form>
     <section className="panel table-panel"><PanelTitle icon={ClipboardList} title="التدريبات السابقة" subtitle={`${records.length} تدريب مسجل`} /><div className="table-wrap"><table><thead><tr><th>التاريخ</th><th>نوع التدريب</th><th>اسم التدريب</th><th>الجهة</th><th>الممول</th><th>المدرب</th><th>المتدربون</th><th>المكان</th><th>المدة</th><th>الحضور</th><th>الإجراءات</th></tr></thead><tbody>{records.map(x=><tr key={x.id}><td>{x.training_date}</td><td>{x.training_type==="community"?"مجتمع محلي":"طاقم العمل"}</td><td><b>{x.training_name}</b></td><td>{x.training_agency||"—"}</td><td>{x.funder||"—"}</td><td>{x.trainer_name||"—"}</td><td>{x.trainee_count||0}</td><td>{x.location||"—"}</td><td>{x.training_days||0} يوم / {x.training_hours||0} ساعة</td><td>{x.training_type==="staff"?`${x.present_count||0} / ${x.attendees_count||0}`:"—"}</td><td><div className="training-row-actions"><button className="training-details-button" type="button" onClick={()=>setSelectedTraining(x)}><Eye/> تفاصيل التدريب</button><button className="training-delete-button" type="button" onClick={()=>deleteTraining(Number(x.id))}><Trash2/> حذف</button></div></td></tr>)}{!records.length&&!loading&&<tr><td colSpan={11}><Empty/></td></tr>}</tbody></table>{loading&&<div className="loading-row">جاري تحميل التدريبات...</div>}</div></section>
     {selectedTraining && <div className="training-modal-backdrop" onClick={()=>setSelectedTraining(null)}><div className="training-details-modal" onClick={e=>e.stopPropagation()}><div className="training-modal-head"><div><h3>تفاصيل التدريب</h3><p>{selectedTraining.training_name}</p></div><button type="button" className="user-close" onClick={()=>setSelectedTraining(null)}><X/></button></div><div className="training-detail-fields"><div><small>نوع التدريب</small><b>{selectedTraining.training_type==="community"?"تدريب مجتمع محلي":"تدريب طاقم العمل"}</b></div><div><small>التاريخ</small><b>{selectedTraining.training_date}</b></div><div><small>الجهة / الممول</small><b>{selectedTraining.training_agency||"—"} / {selectedTraining.funder||"—"}</b></div><div><small>المدرب والمكان</small><b>{selectedTraining.trainer_name||"—"} / {selectedTraining.location||"—"}</b></div><div><small>المدة</small><b>{selectedTraining.training_days||0} يوم / {selectedTraining.training_hours||0} ساعة</b></div></div>{selectedTraining.training_type==="staff"&&<div className="training-modal-attendance"><h4>حضور المتدربين حسب الأيام</h4><div className="training-modal-table"><div className="training-modal-row training-modal-header"><b>المتدرب</b>{Array.from({length:Math.max(1,Number(selectedTraining.training_days||1))},(_,i)=><b key={i}>يوم {i+1}</b>)}</div>{staffByTraining(Number(selectedTraining.id)).map(person=><div className="training-modal-row" key={person.staff_id}><span>{person.full_name}</span>{Array.from({length:Math.max(1,Number(selectedTraining.training_days||1))},(_,i)=>{const row=dailyByTraining(Number(selectedTraining.id)).find(a=>Number(a.staff_id)===Number(person.staff_id)&&Number(a.training_day)===i+1);return <span key={i} className={row?.attended?"present":"absent"}>{row?.attended?"حاضر":"غائب"}</span>})}</div>)}</div></div>}<div className="training-modal-actions"><button className="training-delete-button" type="button" onClick={()=>deleteTraining(Number(selectedTraining.id))}><Trash2/> حذف التدريب</button><button className="ghost" type="button" onClick={()=>setSelectedTraining(null)}>إغلاق</button></div></div></div>}
+    {selectedTraining && <button className="training-floating-edit" type="button" onClick={()=>editTraining(selectedTraining)}><Pencil/> تعديل بيانات التدريب</button>}
   </div>;
 }
 
