@@ -3444,7 +3444,8 @@ function TrainingView({ staff }: { staff: any[] }) {
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
     const selectedAttendees = Object.entries(selected).filter(([, value]) => value).map(([staffId]) => ({ staffId: Number(staffId), attended: attendance[staffId] !== false }));
-    const daily = Object.entries(dailyAttendance).map(([key, value]) => { const [staffId, day] = key.split(":"); return { staffId: Number(staffId), day: Number(day), attended: value }; });
+    const trainingDays = Math.max(1, Number(draft.trainingDays || 1));
+    const daily = Object.keys(selected).filter(staffId => selected[staffId]).flatMap(staffId => Array.from({length: trainingDays}, (_, index) => { const day=index+1; const key=`${staffId}:${day}`; return { staffId: Number(staffId), day, attended: dailyAttendance[key] !== false }; }));
     try {
       const r = await fetch(editingTrainingId ? "/api/trainings" : "/api/trainings", { method: editingTrainingId ? "PATCH" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...draft, id: editingTrainingId, attendees: selectedAttendees, dailyAttendance: daily }) });
       const v = await r.json(); if (!r.ok) throw Error(v.error || "تعذر حفظ التدريب");
