@@ -314,9 +314,10 @@ input[type="time"],input[type="datetime-local"]{font-family:Arial,"Segoe UI",san
   animation: enter 0.35s ease;
 }
 .filters-panel {
-  display: flex;
+  display: grid;
+  grid-template-columns: 185px minmax(0, 1fr) auto;
   align-items: end;
-  gap: 18px;
+  gap: 16px;
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 18px;
@@ -328,6 +329,7 @@ input[type="time"],input[type="datetime-local"]{font-family:Arial,"Segoe UI",san
   align-items: center;
   gap: 11px;
   min-width: 180px;
+  align-self: center;
 }
 .filter-title b {
   display: block;
@@ -361,7 +363,7 @@ input[type="time"],input[type="datetime-local"]{font-family:Arial,"Segoe UI",san
   display: grid;
   grid-template-columns: repeat(4, minmax(120px, 1fr));
   gap: 12px;
-  flex: 1;
+  min-width: 0;
 }
 .filters-panel label,
 .incident-form label {
@@ -400,6 +402,8 @@ input[type="time"],input[type="datetime-local"]{font-family:Arial,"Segoe UI",san
 .filter-buttons {
   display: flex;
   gap: 8px;
+  align-self: end;
+  white-space: nowrap;
 }
 .kpi-grid {
   display: grid;
@@ -998,10 +1002,7 @@ tbody tr:hover {
   .report-cards {
     grid-template-columns: repeat(2, 1fr);
   }
-  .filters-panel {
-    align-items: stretch;
-    flex-wrap: wrap;
-  }
+  .filters-panel { grid-template-columns: 1fr; align-items: stretch; }
   .filter-title {
     width: 100%;
   }
@@ -1010,6 +1011,7 @@ tbody tr:hover {
   }
   .filter-buttons {
     order: 3;
+    justify-content: flex-start;
   }
   .cols-5 {
     grid-template-columns: repeat(3, 1fr);
