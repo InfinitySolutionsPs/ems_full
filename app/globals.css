@@ -2576,6 +2576,10 @@ tbody tr:hover {
 .training-daily-summary{display:flex;flex-wrap:wrap;gap:7px!important;margin-top:10px!important}
 .training-daily-summary span{background:#f4fbf6;border-color:#d5ecdc;color:#237247;font-weight:700}
 .training-row-actions{display:flex;align-items:center;justify-content:center;gap:6px;min-width:180px}
+.training-records-table{min-width:1280px}
+.training-records-table th,.training-records-table td{white-space:nowrap;vertical-align:middle}
+.training-records-table .training-date-cell{direction:ltr;text-align:center;white-space:nowrap;min-width:105px}
+.training-records-table .training-attendance-cell{font-weight:800;color:#187849;min-width:72px}
 .training-row-actions button,.training-modal-actions button{display:inline-flex;align-items:center;gap:5px;border-radius:9px;padding:7px 9px;font:inherit;font-size:11px;font-weight:800;cursor:pointer}
 .training-row-actions svg,.training-modal-actions svg{width:15px;height:15px}
 .training-details-button{border:1px solid #e4c2c9;background:#fff7f8;color:#a9132d}
