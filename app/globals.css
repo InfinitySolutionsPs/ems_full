@@ -307,6 +307,22 @@ input[type="time"],input[type="datetime-local"]{font-family:Arial,"Segoe UI",san
 .compact {
   height: 44px;
 }
+.table-actions {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.table-actions button {
+  min-width: 82px;
+  padding: 0 12px;
+}
+.table-actions .danger {
+  color: var(--red);
+  border: 1px solid #efc4ca;
+  background: #fff8f8;
+}
 .page-stack {
   display: flex;
   flex-direction: column;
