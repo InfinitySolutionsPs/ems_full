@@ -3443,9 +3443,16 @@ function TrainingView({ staff }: { staff: any[] }) {
   useEffect(() => { void load(); }, [load]);
   const save = async (event: React.FormEvent) => {
     event.preventDefault();
-    const selectedAttendees = Object.entries(selected).filter(([, value]) => value).map(([staffId]) => ({ staffId: Number(staffId), attended: attendance[staffId] !== false }));
+    // The details editor can be opened independently of the main form. Keep a
+    // stable participant list from the selected training as a fallback so an
+    // attendance-only edit never submits an empty attendee set.
+    const selectedIds = Object.keys(selected).filter(staffId => selected[staffId]);
+    const participantIds = selectedIds.length
+      ? selectedIds
+      : (editingTrainingId ? staffByTraining(Number(editingTrainingId)).map(row => String(row.staff_id)) : []);
+    const selectedAttendees = participantIds.map(staffId => ({ staffId: Number(staffId), attended: attendance[staffId] !== false }));
     const trainingDays = Math.max(1, Number(draft.trainingDays || 1));
-    const daily = Object.keys(selected).filter(staffId => selected[staffId]).flatMap(staffId => Array.from({length: trainingDays}, (_, index) => { const day=index+1; const key=`${staffId}:${day}`; return { staffId: Number(staffId), day, attended: dailyAttendance[key] !== false }; }));
+    const daily = participantIds.flatMap(staffId => Array.from({length: trainingDays}, (_, index) => { const day=index+1; const key=`${staffId}:${day}`; return { staffId: Number(staffId), day, attended: dailyAttendance[key] !== false }; }));
     try {
       const r = await fetch(editingTrainingId ? "/api/trainings" : "/api/trainings", { method: editingTrainingId ? "PATCH" : "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...draft, id: editingTrainingId, attendees: selectedAttendees, dailyAttendance: daily }) });
       const v = await r.json(); if (!r.ok) throw Error(v.error || "تعذر حفظ التدريب");
