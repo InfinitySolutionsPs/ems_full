@@ -270,6 +270,8 @@ export default function HomePage() {
     [filters, setFilters] = useState({
       from: monthStart,
       to: today,
+      fromTime: "",
+      toTime: "",
       governorate: "all",
       category: "all",
     }),
@@ -745,6 +747,14 @@ function Filters({
           />
         </label>
         <label>
+          من الساعة
+          <input type="time" value={filters.fromTime || ""} onChange={(e) => setFilters((f: any) => ({ ...f, fromTime: e.target.value }))} />
+        </label>
+        <label>
+          إلى الساعة
+          <input type="time" value={filters.toTime || ""} onChange={(e) => setFilters((f: any) => ({ ...f, toTime: e.target.value }))} />
+        </label>
+        <label>
           المحافظة
           <select
             value={filters.governorate}
@@ -782,6 +792,8 @@ function Filters({
             setFilters({
               from: monthStart,
               to: today,
+              fromTime: "",
+              toTime: "",
               governorate: "all",
               category: "all",
             })
@@ -1580,8 +1592,8 @@ function Records({
   incidents: Incident[];
   loading: boolean;
   onRefresh: () => void;
-  filters: {from:string;to:string;governorate:string;category:string};
-  setFilters: React.Dispatch<React.SetStateAction<{from:string;to:string;governorate:string;category:string}>>;
+  filters: {from:string;to:string;fromTime?:string;toTime?:string;governorate:string;category:string};
+  setFilters: React.Dispatch<React.SetStateAction<{from:string;to:string;fromTime:string;toTime:string;governorate:string;category:string}>>;
   centers: any[];
   stationsData: any[];
   vehicles: any[];
@@ -1723,7 +1735,7 @@ function Records({
           <label>الأولوية<select value={recordFilters.urgency} onChange={e=>{setRecordFilters({...recordFilters,urgency:e.target.value});setRecordPage(1)}}><option value="all">كل الأولويات</option>{["Red","Yellow","Green","N/A"].map(x=><option key={x} value={x}>{urgencyArabic[x]}</option>)}</select></label>
           <label>حالة البلاغ<select value={recordFilters.approval} onChange={e=>{setRecordFilters({...recordFilters,approval:e.target.value});setRecordPage(1)}}><option value="all">جميع الحالات</option><option value="approved">معتمد</option><option value="draft">مسودة</option></select></label>
         </div>
-        <div className="record-filter-actions"><button className="ghost" onClick={()=>{setRecordFilters({station:"all",shift:"all",urgency:"all",approval:"all"});setFilters({from:monthStart,to:today,governorate:"all",category:"all"});setSearch("");setRecordPage(1)}}><RefreshCw /> إعادة ضبط الفلاتر</button></div>
+<div className="record-filter-actions"><button className="ghost" onClick={()=>{setRecordFilters({station:"all",shift:"all",urgency:"all",approval:"all"});setFilters({from:monthStart,to:today,fromTime:"",toTime:"",governorate:"all",category:"all"});setSearch("");setRecordPage(1)}}><RefreshCw /> إعادة ضبط الفلاتر</button></div>
       </section>
       <section className="panel table-panel">
         <PanelTitle
@@ -4022,9 +4034,13 @@ function ReportsV2({
     const iso=(value:Date)=>`${value.getFullYear()}-${String(value.getMonth()+1).padStart(2,"0")}-${String(value.getDate()).padStart(2,"0")}`;
     setFilters((current:any)=>({...current,from:iso(start),to:iso(end)}));
   };
-  const reportIncidents = incidents.filter(
-    (x) => x.approval_status === "approved",
-  );
+  const reportFromStamp = `${filters.from}T${filters.fromTime || "00:00"}`;
+  const reportToStamp = `${filters.to}T${filters.toTime || "23:59"}`;
+  const reportIncidents = incidents.filter((x) => {
+    if (x.approval_status !== "approved") return false;
+    const stamp = `${String(x.call_date || "")}T${String(x.call_time || "00:00")}`;
+    return stamp >= reportFromStamp && stamp <= reportToStamp;
+  });
   const exportStructuredReport=(kind:"periodic"|"field_response")=>{
     const centers=(settingsData.centers||[]).filter((center:any)=>center.active!==0);
     const stations=settingsData.stations||[];
@@ -4039,7 +4055,8 @@ function ReportsV2({
     const keys=kind==="periodic"?["center","a","b","c","total","staff","vehicles"]:["center","total","male","female","children","adults","elderly","deaths","martyrs","injuries","accidents","medical","cancelled"];
     const labels:Record<string,string>={center:"المركز",a:"الوردية A",b:"الوردية B",c:"الوردية C",total:"إجمالي المستفيدين",staff:"العاملون المسجلون",vehicles:"المركبات العاملة",male:"ذكور",female:"إناث",children:"أطفال",adults:"بالغون",elderly:"كبار السن",deaths:"وفيات",martyrs:"شهداء",injuries:"إصابات",accidents:"حوادث",medical:"حالات مرضية",cancelled:"بلاغات ملغاة"};
     const totals:any={center:"الإجمالي"};keys.slice(1).forEach(key=>totals[key]=rows.reduce((sum:number,row:any)=>sum+Number(row[key]||0),0));
-    const csv=[[`الفترة: ${filters.from} إلى ${filters.to}`],[...keys.map(key=>labels[key])],...rows.map((row:any)=>keys.map(key=>row[key])),keys.map(key=>totals[key])].map((line:any[])=>line.map((value:any)=>`"${String(value??"").replaceAll('"','""')}"`).join(",")).join("\n");
+    const timeRange = filters.fromTime || filters.toTime ? ` من الساعة ${filters.fromTime || "00:00"} إلى ${filters.toTime || "23:59"}` : "";
+    const csv=[[`الفترة: ${filters.from}${timeRange} إلى ${filters.to}${timeRange}`],[...keys.map(key=>labels[key])],...rows.map((row:any)=>keys.map(key=>row[key])),keys.map(key=>totals[key])].map((line:any[])=>line.map((value:any)=>`"${String(value??"").replaceAll('"','""')}"`).join(",")).join("\n");
     const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`${kind}-${filters.from}-${filters.to}.csv`;a.click();URL.revokeObjectURL(a.href);
   };
   const exportCoordination = async () => {
