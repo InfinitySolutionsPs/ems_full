@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({vehicle,incidents:detailIncidents.results,fuel:detailFuel.results,movements:detailMovements.results,maintenance:detailMaintenance.results});
   }
   const [fuel, movements, incidents] = await env.DB.batch([
-    env.DB.prepare("SELECT f.*,v.plate_number,i.incident_number FROM fuel_fillings f JOIN vehicles v ON v.id=f.vehicle_id LEFT JOIN incidents i ON i.id=f.incident_id WHERE substr(f.filled_at,1,10) BETWEEN ? AND ? ORDER BY f.filled_at DESC LIMIT 1000").bind(from,to),
+    env.DB.prepare("SELECT f.*,v.plate_number,COALESCE(c.governorate,'') AS governorate,i.incident_number FROM fuel_fillings f JOIN vehicles v ON v.id=f.vehicle_id LEFT JOIN centers c ON c.id=v.center_id LEFT JOIN incidents i ON i.id=f.incident_id WHERE substr(f.filled_at,1,10) BETWEEN ? AND ? ORDER BY f.filled_at DESC LIMIT 1000").bind(from,to),
     env.DB.prepare("SELECT m.*,v.plate_number,i.incident_number FROM vehicle_movements m JOIN vehicles v ON v.id=m.vehicle_id LEFT JOIN incidents i ON i.id=m.incident_id WHERE substr(m.departed_at,1,10) BETWEEN ? AND ? ORDER BY m.departed_at DESC LIMIT 1000").bind(from,to),
     env.DB.prepare("SELECT i.id,i.incident_number,i.vehicle,i.vehicle_id,i.call_date,i.distance_km,i.fuel_liters,i.station,i.approval_status FROM incidents i WHERE i.call_date BETWEEN ? AND ? ORDER BY i.call_date DESC LIMIT 5000").bind(from,to),
   ]);
@@ -99,6 +99,27 @@ export async function POST(request: NextRequest) {
       if (result.meta.changes) added++;
     }
     return NextResponse.json({ok:true,added});
+  }
+  if (b.action === "delete_fill") {
+    const id = Number(b.id);
+    if (!Number.isInteger(id) || id < 1) return reply("سجل التعبئة غير صالح");
+    const row = await env.DB.prepare("SELECT f.id,f.vehicle_id,v.plate_number FROM fuel_fillings f JOIN vehicles v ON v.id=f.vehicle_id WHERE f.id=?").bind(id).first<any>();
+    if (!row) return reply("سجل التعبئة غير موجود",404);
+    await env.DB.prepare("DELETE FROM fuel_fillings WHERE id=?").bind(id).run();
+    await env.DB.prepare("INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,?,?,?,?)").bind(access.email,"delete","fuel_filling",String(id),row.plate_number).run();
+    return NextResponse.json({ok:true});
+  }
+  if (b.action === "update_fill") {
+    const id = Number(b.id);
+    if (!Number.isInteger(id) || id < 1) return reply("سجل التعبئة غير صالح");
+    const row = await env.DB.prepare("SELECT id,vehicle_id FROM fuel_fillings WHERE id=?").bind(id).first<any>();
+    if (!row) return reply("سجل التعبئة غير موجود",404);
+    const liters=number(b.liters);
+    if (!validDate(b.filledAt) || liters==null || !Number.isFinite(liters) || liters<=0 || !["بنزين","سولار"].includes(text(b.fuelType))) return reply("يرجى إدخال تاريخ وكمية صحيحة وتحديد نوع الوقود");
+    await env.DB.prepare("UPDATE fuel_fillings SET filled_at=?,liters=?,fuel_type=?,odometer_km=?,driver_staff_id=?,driver_name=?,filled_by_staff_id=?,filled_by_name=?,source_name=?,voucher_number=?,notes=? WHERE id=?")
+      .bind(b.filledAt,liters,text(b.fuelType),number(b.odometerKm),number(b.driverStaffId),text(b.driverName)||null,number(b.filledByStaffId),text(b.filledByName)||null,text(b.sourceName)||null,text(b.voucherNumber)||null,text(b.notes)||null,id).run();
+    await env.DB.prepare("INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,?,?,?,?)").bind(access.email,"update","fuel_filling",String(id),String(row.vehicle_id)).run();
+    return NextResponse.json({ok:true});
   }
   const vehicleId = Number(b.vehicleId);
   const vehicle = await env.DB.prepare("SELECT v.*,c.name center_name FROM vehicles v LEFT JOIN centers c ON c.id=v.center_id WHERE v.id=?").bind(vehicleId).first<any>();
