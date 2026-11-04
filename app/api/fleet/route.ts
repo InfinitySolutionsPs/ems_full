@@ -19,10 +19,12 @@ export async function GET(request: NextRequest) {
   ]);
   const existingFleet=await env.DB.prepare("SELECT plate_number FROM vehicles").all();
   const knownFleet=new Set(existingFleet.results.map((x:any)=>String(x.plate_number).replace(/\s/g,"")));
+  const deletedFleetRows=await env.DB.prepare("SELECT key FROM system_settings WHERE key LIKE 'deleted_vehicle_%'").all();
+  const deletedFleet=new Set(deletedFleetRows.results.map((x:any)=>String(x.key).slice("deleted_vehicle_".length)));
   const stationRows=await env.DB.prepare("SELECT code,center_id FROM stations").all();
   const centerIds=new Map(stationRows.results.map((x:any)=>[x.code,Number(x.center_id)]));
   const stationCode=(location:string)=>String(location||"").includes("دير")?"DEI":String(location||"").includes("جباليا")?"JAB":"GAZ";
-  const pending=fleet.filter((v:any)=>!knownFleet.has(String(v.plate).replace(/\s/g,"")));
+  const pending=fleet.filter((v:any)=>{const plate=String(v.plate).replace(/\s/g,"");return !knownFleet.has(plate)&&!deletedFleet.has(plate);});
   for(let i=0;i<pending.length;i+=40) await env.DB.batch(pending.slice(i,i+40).map((v:any)=>env.DB.prepare("INSERT INTO vehicles (plate_number,manufacturer,model,production_year,chassis_number,fuel_type,mileage_km,ambulance_type,usage_status,work_location,service_status,active,fleet_source_row,center_id) VALUES (?,?,?,?,?,?,?,?,? ,?,'active',1,?,?) ON CONFLICT(plate_number) DO NOTHING").bind(v.plate,v.manufacturer||null,v.model||null,Number(v.productionYear)||null,v.chassis||null,v.fuelType||null,Number(v.mileage)||null,v.ambulanceType||null,v.usage||null,v.location||null,v.sourceRow,centerIds.get(stationCode(v.location))||null)));
   const station = access.profile.role === "station_user" ? access.profile.station : null;
   const query = new URL(request.url).searchParams;
