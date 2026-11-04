@@ -102,8 +102,13 @@ export async function GET(request: NextRequest) {
   const governorate = url.searchParams.get("governorate") || "all";
   const category = url.searchParams.get("category") || "all";
   const incidentStatus = url.searchParams.get("incidentStatus") || "all";
+  const fromTime = url.searchParams.get("fromTime") || "";
+  const toTime = url.searchParams.get("toTime") || "";
   let sql = "SELECT * FROM incidents WHERE call_date BETWEEN ? AND ?";
   const args: unknown[] = [from, to];
+  // Pair each time filter with its corresponding date boundary.
+  if (fromTime) { sql += " AND (call_date > ? OR (call_date = ? AND COALESCE(call_time,'00:00') >= ?))"; args.push(from, from, fromTime); }
+  if (toTime) { sql += " AND (call_date < ? OR (call_date = ? AND COALESCE(call_time,'23:59') <= ?))"; args.push(to, to, toTime); }
   if (governorate !== "all") {
     sql += " AND pickup_governorate = ?";
     args.push(governorate);
