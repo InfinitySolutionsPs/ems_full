@@ -32,9 +32,10 @@ export async function GET(request: NextRequest) {
   const to = query.get("to") || "2999-12-31";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to) || from > to) return reply("الفترة غير صالحة");
   const vehicles = await env.DB.prepare("SELECT v.*,v.center_id station_id,c.name station_name,c.name center_name FROM vehicles v LEFT JOIN centers c ON c.id=v.center_id ORDER BY v.plate_number").all();
+  const visibleVehicles = vehicles.results.filter((v:any) => !deletedFleet.has(String(v.plate_number || "").replace(/\s/g,"")));
   const scope = station ? await env.DB.prepare(`SELECT id center_id FROM centers WHERE name=?
     UNION ALL SELECT center_id FROM stations WHERE name=? AND center_id IS NOT NULL LIMIT 1`).bind(station,station).first<any>() : null;
-  const available = scope?.center_id ? vehicles.results.filter((v: any) => Number(v.center_id) === Number(scope.center_id)) : station ? [] : vehicles.results;
+  const available = scope?.center_id ? visibleVehicles.filter((v: any) => Number(v.center_id) === Number(scope.center_id)) : station ? [] : visibleVehicles;
   const ids = new Set(available.map((v: any) => Number(v.id)));
   const detailVehicleId = Number(query.get("vehicleId") || 0);
   if (query.has("vehicleId")) {
@@ -62,7 +63,7 @@ export async function GET(request: NextRequest) {
   ]);
   const normalize = (v: unknown) => text(v).replace(/\s/g, "");
   const plates = new Set(available.map((v:any)=>normalize(v.plate_number)));
-  const existingPlates = new Set(vehicles.results.map((v:any)=>normalize(v.plate_number)));
+  const existingPlates = new Set(visibleVehicles.map((v:any)=>normalize(v.plate_number)));
   const pendingImportCount = access.profile.role === "admin" ? fleet.filter(v=>v.plate!=="3-2003-55" && v.plate!=="3-0257-55" && !existingPlates.has(normalize(v.plate))).length : 0;
   const allowedStationNames = scope?.center_id ? new Set((await env.DB.prepare("SELECT name FROM stations WHERE center_id=?").bind(scope.center_id).all()).results.map((row:any)=>String(row.name))) : null;
   return NextResponse.json({ vehicles: available, canEditVehicles: hasPermission(access.profile,"fleet.manage"), canDeleteVehicles: hasPermission(access.profile,"fleet.manage"), pendingImportCount, fuel: fuel.results.filter((r:any)=>ids.has(Number(r.vehicle_id))),
