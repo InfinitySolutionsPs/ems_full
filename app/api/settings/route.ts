@@ -392,9 +392,15 @@ export async function DELETE(request: NextRequest) {
       await env.DB.prepare("DELETE FROM stations WHERE id=?").bind(id).run();
     } else if (entity === "vehicle") {
       if (!id) return NextResponse.json({ error: "المركبة غير محددة" }, { status: 400 });
+      const vehicle = await env.DB.prepare("SELECT id,plate_number FROM vehicles WHERE id=?").bind(id).first<any>();
+      if (!vehicle) return NextResponse.json({ error: "المركبة غير موجودة أو حُذفت مسبقًا" }, { status: 404 });
       const used = await env.DB.prepare("SELECT 1 FROM incidents WHERE vehicle_id=? UNION ALL SELECT 1 FROM fuel_fillings WHERE vehicle_id=? UNION ALL SELECT 1 FROM vehicle_movements WHERE vehicle_id=? UNION ALL SELECT 1 FROM vehicle_maintenance WHERE vehicle_id=? LIMIT 1").bind(id, id, id, id).first();
       if (used) return NextResponse.json({ error: "لا يمكن حذف المركبة لأنها مرتبطة ببلاغات أو حركة أو وقود أو صيانة. أخرجيها من الخدمة بدلًا من الحذف." }, { status: 409 });
-      await env.DB.prepare("DELETE FROM vehicles WHERE id=?").bind(id).run();
+      const plateKey = String(vehicle.plate_number || "").replace(/\s/g, "");
+      await env.DB.batch([
+        env.DB.prepare("DELETE FROM vehicles WHERE id=?").bind(id),
+        env.DB.prepare("INSERT INTO system_settings (key,value,label,category,updated_by) VALUES (?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP").bind("deleted_vehicle_"+plateKey, "1", "مركبة محذوفة", "_deleted", access.email),
+      ]);
     } else if (entity === "staff") {
       if (!id) return NextResponse.json({ error: "الموظف غير محدد" }, { status: 400 });
       const employee = await env.DB.prepare("SELECT full_name FROM staff WHERE id=?").bind(id).first<any>();
