@@ -10,9 +10,13 @@ export async function GET(request:NextRequest){
   if(!hasPermission(access.profile,"dashboard.view")) return NextResponse.json({error:"لا توجد صلاحية لعرض المؤشرات"},{status:403});
   const url=new URL(request.url);
   const from=url.searchParams.get("from")||"1900-01-01",to=url.searchParams.get("to")||"2999-12-31";
+  const fromTime=url.searchParams.get("fromTime")||"",toTime=url.searchParams.get("toTime")||"";
   const governorate=url.searchParams.get("governorate")||"all",category=url.searchParams.get("category")||"all";
   let where="approval_status='approved' AND call_date BETWEEN ? AND ?";
   const args:unknown[]=[from,to];
+  // Pair the first clock value with «من تاريخ» and the second with «إلى تاريخ».
+  if(fromTime){where+=" AND (call_date > ? OR (call_date = ? AND COALESCE(call_time,'00:00') >= ?))";args.push(from,from,fromTime);}
+  if(toTime){where+=" AND (call_date < ? OR (call_date = ? AND COALESCE(call_time,'23:59') <= ?))";args.push(to,to,toTime);}
   if(governorate!=="all"){where+=" AND pickup_governorate=?";args.push(governorate);}
   if(category!=="all"){where+=" AND category=?";args.push(category);}
   if(access.profile?.role==="station_user"){where+=" AND station=?";args.push(access.profile.station);}
