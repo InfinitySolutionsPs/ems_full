@@ -364,6 +364,9 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ ok: true }, { status: 201 });
 }
 
+// Temporary administrative mode: linked records are cleaned/unlinked during deletion.
+const TEMP_ALLOW_LINKED_DELETE = true;
+
 export async function DELETE(request: NextRequest) {
   const access = await getAccess(request);
   const { entity, id, key } = (await request.json()) as Record<string, any>;
