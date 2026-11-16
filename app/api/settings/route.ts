@@ -386,19 +386,49 @@ export async function DELETE(request: NextRequest) {
     } else if (entity === "center") {
       if (!id) return NextResponse.json({ error: "المركز غير محدد" }, { status: 400 });
       const used = await env.DB.prepare("SELECT 1 FROM stations WHERE center_id=? UNION ALL SELECT 1 FROM staff WHERE center_id=? UNION ALL SELECT 1 FROM vehicles WHERE center_id=? LIMIT 1").bind(id, id, id).first();
-      if (used) return NextResponse.json({ error: "لا يمكن حذف المركز قبل حذف أو نقل المحطات والموظفين والمركبات التابعة له." }, { status: 409 });
+      if (used && !TEMP_ALLOW_LINKED_DELETE) return NextResponse.json({ error: "لا يمكن حذف المركز قبل حذف أو نقل المحطات والموظفين والمركبات التابعة له." }, { status: 409 });
+      if (TEMP_ALLOW_LINKED_DELETE) {
+        await env.DB.batch([
+          env.DB.prepare("UPDATE incidents SET vehicle_id=NULL WHERE vehicle_id IN (SELECT id FROM vehicles WHERE center_id=?)").bind(id),
+          env.DB.prepare("DELETE FROM fuel_fillings WHERE vehicle_id IN (SELECT id FROM vehicles WHERE center_id=?) OR driver_staff_id IN (SELECT id FROM staff WHERE center_id=?) OR filled_by_staff_id IN (SELECT id FROM staff WHERE center_id=?)").bind(id,id,id),
+          env.DB.prepare("DELETE FROM vehicle_movements WHERE vehicle_id IN (SELECT id FROM vehicles WHERE center_id=?) OR driver_staff_id IN (SELECT id FROM staff WHERE center_id=?)").bind(id,id),
+          env.DB.prepare("DELETE FROM vehicle_maintenance WHERE vehicle_id IN (SELECT id FROM vehicles WHERE center_id=?) OR station_id IN (SELECT id FROM stations WHERE center_id=?)").bind(id,id),
+          env.DB.prepare("DELETE FROM operational_assignments WHERE station_id IN (SELECT id FROM stations WHERE center_id=?) OR staff_id IN (SELECT id FROM staff WHERE center_id=?)").bind(id,id),
+          env.DB.prepare("DELETE FROM training_attendance WHERE staff_id IN (SELECT id FROM staff WHERE center_id=?)").bind(id),
+          env.DB.prepare("DELETE FROM training_attendees WHERE staff_id IN (SELECT id FROM staff WHERE center_id=?)").bind(id),
+          env.DB.prepare("DELETE FROM vehicles WHERE center_id=?").bind(id),
+          env.DB.prepare("DELETE FROM staff WHERE center_id=?").bind(id),
+          env.DB.prepare("DELETE FROM stations WHERE center_id=?").bind(id),
+        ]);
+      }
       await env.DB.prepare("DELETE FROM centers WHERE id=?").bind(id).run();
     } else if (entity === "station") {
       if (!id) return NextResponse.json({ error: "المحطة غير محددة" }, { status: 400 });
       const used = await env.DB.prepare("SELECT 1 FROM operational_assignments WHERE station_id=? UNION ALL SELECT 1 FROM vehicle_maintenance WHERE station_id=? LIMIT 1").bind(id, id).first();
-      if (used) return NextResponse.json({ error: "لا يمكن حذف المحطة لأنها مرتبطة بسجلات تشغيلية أو صيانة. يمكن تعديلها بدلًا من ذلك." }, { status: 409 });
+      if (used && !TEMP_ALLOW_LINKED_DELETE) return NextResponse.json({ error: "لا يمكن حذف المحطة لأنها مرتبطة بسجلات تشغيلية أو صيانة. يمكن تعديلها بدلًا من ذلك." }, { status: 409 });
+      if (TEMP_ALLOW_LINKED_DELETE) {
+        await env.DB.batch([
+          env.DB.prepare("DELETE FROM operational_assignments WHERE station_id=?").bind(id),
+          env.DB.prepare("DELETE FROM vehicle_maintenance WHERE station_id=?").bind(id),
+          env.DB.prepare("UPDATE vehicles SET station_id=NULL WHERE station_id=?").bind(id),
+          env.DB.prepare("UPDATE staff SET station_id=NULL WHERE station_id=?").bind(id),
+        ]);
+      }
       await env.DB.prepare("DELETE FROM stations WHERE id=?").bind(id).run();
     } else if (entity === "vehicle") {
       if (!id) return NextResponse.json({ error: "المركبة غير محددة" }, { status: 400 });
       const vehicle = await env.DB.prepare("SELECT id,plate_number FROM vehicles WHERE id=?").bind(id).first<any>();
       if (!vehicle) return NextResponse.json({ error: "المركبة غير موجودة أو حُذفت مسبقًا" }, { status: 404 });
       const used = await env.DB.prepare("SELECT 1 FROM incidents WHERE vehicle_id=? UNION ALL SELECT 1 FROM fuel_fillings WHERE vehicle_id=? UNION ALL SELECT 1 FROM vehicle_movements WHERE vehicle_id=? UNION ALL SELECT 1 FROM vehicle_maintenance WHERE vehicle_id=? LIMIT 1").bind(id, id, id, id).first();
-      if (used) return NextResponse.json({ error: "لا يمكن حذف المركبة لأنها مرتبطة ببلاغات أو حركة أو وقود أو صيانة. أخرجيها من الخدمة بدلًا من الحذف." }, { status: 409 });
+      if (used && !TEMP_ALLOW_LINKED_DELETE) return NextResponse.json({ error: "لا يمكن حذف المركبة لأنها مرتبطة ببلاغات أو حركة أو وقود أو صيانة. أخرجيها من الخدمة بدلًا من الحذف." }, { status: 409 });
+      if (TEMP_ALLOW_LINKED_DELETE) {
+        await env.DB.batch([
+          env.DB.prepare("UPDATE incidents SET vehicle_id=NULL WHERE vehicle_id=?").bind(id),
+          env.DB.prepare("DELETE FROM fuel_fillings WHERE vehicle_id=?").bind(id),
+          env.DB.prepare("DELETE FROM vehicle_movements WHERE vehicle_id=?").bind(id),
+          env.DB.prepare("DELETE FROM vehicle_maintenance WHERE vehicle_id=?").bind(id),
+        ]);
+      }
       const plateKey = String(vehicle.plate_number || "").replace(/\s/g, "");
       await env.DB.batch([
         env.DB.prepare("DELETE FROM vehicles WHERE id=?").bind(id),
@@ -409,7 +439,16 @@ export async function DELETE(request: NextRequest) {
       const employee = await env.DB.prepare("SELECT full_name FROM staff WHERE id=?").bind(id).first<any>();
       if (!employee) return NextResponse.json({ error: "الموظف غير موجود أو حُذف مسبقًا" }, { status: 404 });
       const used = await env.DB.prepare("SELECT 1 FROM operational_assignments WHERE staff_id=? UNION ALL SELECT 1 FROM vehicle_movements WHERE driver_staff_id=? UNION ALL SELECT 1 FROM fuel_fillings WHERE driver_staff_id=? OR filled_by_staff_id=? LIMIT 1").bind(id, id, id, id).first();
-      if (used) return NextResponse.json({ error: "لا يمكن حذف الموظف لوجود سجلات تشغيلية مرتبطة به. غيّري حالته الوظيفية بدلًا من الحذف." }, { status: 409 });
+      if (used && !TEMP_ALLOW_LINKED_DELETE) return NextResponse.json({ error: "لا يمكن حذف الموظف لوجود سجلات تشغيلية مرتبطة به. غيّري حالته الوظيفية بدلًا من الحذف." }, { status: 409 });
+      if (TEMP_ALLOW_LINKED_DELETE) {
+        await env.DB.batch([
+          env.DB.prepare("DELETE FROM operational_assignments WHERE staff_id=?").bind(id),
+          env.DB.prepare("DELETE FROM training_attendance WHERE staff_id=?").bind(id),
+          env.DB.prepare("DELETE FROM training_attendees WHERE staff_id=?").bind(id),
+          env.DB.prepare("UPDATE vehicle_movements SET driver_staff_id=NULL WHERE driver_staff_id=?").bind(id),
+          env.DB.prepare("UPDATE fuel_fillings SET driver_staff_id=NULL,filled_by_staff_id=NULL WHERE driver_staff_id=? OR filled_by_staff_id=?").bind(id,id),
+        ]);
+      }
       await env.DB.batch([
         env.DB.prepare("DELETE FROM staff WHERE id=?").bind(id),
         env.DB.prepare("INSERT INTO deleted_staff_records (normalized_name,full_name,deleted_by) VALUES (?,?,?) ON CONFLICT(normalized_name) DO UPDATE SET full_name=excluded.full_name,deleted_by=excluded.deleted_by,deleted_at=CURRENT_TIMESTAMP")
