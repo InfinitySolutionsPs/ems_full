@@ -2640,3 +2640,11 @@ tbody tr:hover {
 .password-change-modal>label{display:grid;gap:7px;font-weight:800;color:#353b45}
 .password-change-modal input{height:48px;border:1px solid #dfe3e8;border-radius:12px;padding:0 13px;font:inherit}
 .change-password-link{margin-top:4px}
+
+/* Daily EMS report grouping */
+.daily-report .table-wrap{overflow-x:auto}
+.daily-report table{min-width:1180px;border-collapse:collapse}
+.daily-report th{white-space:nowrap;vertical-align:middle}
+.daily-report .report-center-cell{background:#f3f4f6;vertical-align:middle;border-left:2px solid #c4172c;font-size:1.02rem;min-width:130px}
+.daily-report .report-subtotal-row td{background:#f7f7f8;border-top:2px solid #cbd0d6;font-weight:700}
+.daily-report .report-total-row td{background:#e8edf3;border-top:3px solid #c4172c;font-weight:800}
