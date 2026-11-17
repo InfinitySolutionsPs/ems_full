@@ -2674,3 +2674,83 @@ tbody tr:hover {
   .daily-report .formal-report-head p { font-size:9px!important; }
   .daily-report tr { break-inside:avoid; }
 }
+
+/* Coordination page pagination */
+.coordination-page .pagination {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;
+  gap:14px 22px;
+  margin-top:18px;
+  padding:16px 4px 2px;
+  border-top:1px solid #edf0f3;
+  color:#5d6675;
+  font-size:13px;
+  font-weight:700;
+  direction:rtl;
+}
+.coordination-page .pagination > label {
+  display:flex;
+  align-items:center;
+  gap:9px;
+  white-space:nowrap;
+}
+.coordination-page .pagination select {
+  min-width:72px;
+  height:38px;
+  padding:0 10px;
+  border:1px solid #dfe4ec;
+  border-radius:10px;
+  background:#fff;
+  color:#303847;
+  font:inherit;
+  font-weight:800;
+}
+.coordination-page .pagination > span {
+  flex:1;
+  text-align:center;
+  white-space:nowrap;
+  color:#303847;
+}
+.coordination-page .pagination > div {
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.coordination-page .pagination button {
+  min-width:40px;
+  height:38px;
+  padding:0 12px;
+  border:1px solid #dfe4ec;
+  border-radius:10px;
+  background:#fff;
+  color:#4e5868;
+  font:inherit;
+  font-weight:800;
+  cursor:pointer;
+  transition:all .18s ease;
+}
+.coordination-page .pagination button:hover:not(:disabled) {
+  border-color:#c91431;
+  color:#c91431;
+}
+.coordination-page .pagination button.primary {
+  border-color:#c91431;
+  background:#c91431;
+  color:#fff;
+}
+.coordination-page .pagination button:disabled {
+  opacity:.45;
+  cursor:not-allowed;
+}
+@media (max-width:700px) {
+  .coordination-page .pagination {
+    align-items:stretch;
+    flex-direction:column;
+  }
+  .coordination-page .pagination > span { order:-1; text-align:right; }
+  .coordination-page .pagination > div { justify-content:flex-start; }
+}
