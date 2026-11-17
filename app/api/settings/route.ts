@@ -404,6 +404,7 @@ export async function DELETE(request: NextRequest) {
       await env.DB.prepare("DELETE FROM centers WHERE id=?").bind(id).run();
     } else if (entity === "station") {
       if (!id) return NextResponse.json({ error: "المحطة غير محددة" }, { status: 400 });
+      const stationBeforeDelete = await env.DB.prepare("SELECT code FROM stations WHERE id=?").bind(id).first<any>();
       const used = await env.DB.prepare("SELECT 1 FROM operational_assignments WHERE station_id=? UNION ALL SELECT 1 FROM vehicle_maintenance WHERE station_id=? LIMIT 1").bind(id, id).first();
       if (used && !TEMP_ALLOW_LINKED_DELETE) return NextResponse.json({ error: "لا يمكن حذف المحطة لأنها مرتبطة بسجلات تشغيلية أو صيانة. يمكن تعديلها بدلًا من ذلك." }, { status: 409 });
       if (TEMP_ALLOW_LINKED_DELETE) {
@@ -414,7 +415,7 @@ export async function DELETE(request: NextRequest) {
           env.DB.prepare("UPDATE staff SET station_id=NULL WHERE station_id=?").bind(id),
         ]);
       }
-      await env.DB.batch([env.DB.prepare("DELETE FROM stations WHERE id=?").bind(id),env.DB.prepare("INSERT INTO system_settings (key,value,label,category,updated_by) VALUES (?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP").bind("deleted_station_"+String((await env.DB.prepare("SELECT code FROM stations WHERE id=?").bind(id).first<any>())?.code||id),"1","محطة محذوفة","_deleted",access.email)]);
+      await env.DB.batch([env.DB.prepare("DELETE FROM stations WHERE id=?").bind(id),env.DB.prepare("INSERT INTO system_settings (key,value,label,category,updated_by) VALUES (?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP").bind("deleted_station_"+String(stationBeforeDelete?.code||id),"1","محطة محذوفة","_deleted",access.email)]);
     } else if (entity === "vehicle") {
       if (!id) return NextResponse.json({ error: "المركبة غير محددة" }, { status: 400 });
       const vehicle = await env.DB.prepare("SELECT id,plate_number FROM vehicles WHERE id=?").bind(id).first<any>();
