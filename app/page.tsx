@@ -2039,13 +2039,20 @@ function AuditLogView() {
 function BackupsView() {
   const [status, setStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);\n  const [saving, setSaving] = useState(false);\n  const [email, setEmail] = useState("");\n  const [schedule, setSchedule] = useState("daily");\n  const [automatic, setAutomatic] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [email, setEmail] = useState("");
+  const [schedule, setSchedule] = useState("daily");
+  const [automatic, setAutomatic] = useState(true);
   const load = useCallback(async () => {
     try {
       const response = await fetch("/api/backups", { cache: "no-store" });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "تعذر تحميل حالة النسخ الاحتياطي");
-      setStatus(result);\n      setEmail(result.backup_email || result.email || "");\n      setSchedule(result.backup_schedule || result.schedule || "daily");\n      setAutomatic(result.backup_automatic !== false && result.automatic !== false);
+      setStatus(result);
+      setEmail(result.backup_email || result.email || "");
+      setSchedule(result.backup_schedule || result.schedule || "daily");
+      setAutomatic(result.backup_automatic !== false && result.automatic !== false);
     } catch (error) { setStatus({ status: "unavailable", error: String(error).replace(/^Error: /, "") }); }
     finally { setLoading(false); }
   }, []);
