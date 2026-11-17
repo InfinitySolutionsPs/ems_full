@@ -2806,3 +2806,56 @@ tbody tr:hover {
   .coordination-page .coordination-filter > div:last-child { grid-template-columns:1fr; }
   .coordination-page > .form-hero { padding:16px; }
 }
+
+/* Final register-style footer for coordination records */
+.coordination-page .table-panel > .pagination {
+  display:grid;
+  grid-template-columns:1fr auto 1fr;
+  align-items:center;
+  min-height:72px;
+  margin:0 -24px -24px;
+  padding:12px 18px;
+  border-top:1px solid #edf0f3;
+  background:#fff;
+  direction:rtl;
+}
+.coordination-page .table-panel > .pagination > label {
+  justify-self:start;
+  grid-column:1;
+}
+.coordination-page .table-panel > .pagination > span {
+  grid-column:2;
+  justify-self:center;
+  text-align:center;
+  white-space:nowrap;
+}
+.coordination-page .table-panel > .pagination > div {
+  grid-column:3;
+  justify-self:end;
+  direction:rtl;
+  flex-wrap:nowrap;
+}
+.coordination-page .table-panel > .pagination button {
+  min-width:42px;
+  height:40px;
+  border-radius:10px;
+}
+.coordination-page .table-panel > .pagination button:first-child,
+.coordination-page .table-panel > .pagination button:last-child {
+  min-width:78px;
+}
+@media(max-width:760px) {
+  .coordination-page .table-panel > .pagination {
+    grid-template-columns:1fr;
+    gap:12px;
+    justify-items:stretch;
+  }
+  .coordination-page .table-panel > .pagination > label,
+  .coordination-page .table-panel > .pagination > span,
+  .coordination-page .table-panel > .pagination > div {
+    grid-column:1;
+    justify-self:stretch;
+  }
+  .coordination-page .table-panel > .pagination > span { text-align:right; }
+  .coordination-page .table-panel > .pagination > div { justify-content:flex-start; flex-wrap:wrap; }
+}
