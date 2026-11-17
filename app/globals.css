@@ -2754,3 +2754,55 @@ tbody tr:hover {
   .coordination-page .pagination > span { order:-1; text-align:right; }
   .coordination-page .pagination > div { justify-content:flex-start; }
 }
+
+/* Keep coordination page consistent with the incidents register */
+.coordination-page { gap:18px; }
+.coordination-page > .form-hero {
+  min-height:86px;
+  padding:20px 24px;
+  border:1px solid #e7e9ef;
+  border-radius:18px;
+  background:#fff;
+  box-shadow:var(--shadow);
+}
+.coordination-page > .form-hero h2 { margin:0; font-size:24px; }
+.coordination-page > .form-hero p { margin:4px 0 0; color:#7b8491; font-size:13px; }
+.coordination-page .coordination-filter { padding:22px 24px; }
+.coordination-page .coordination-filter > div:last-child {
+  display:grid;
+  grid-template-columns:repeat(5,minmax(135px,1fr)) auto;
+  gap:12px;
+  align-items:end;
+}
+.coordination-page .coordination-filter label {
+  display:grid;
+  gap:7px;
+  color:#596273;
+  font-size:12px;
+  font-weight:800;
+}
+.coordination-page .coordination-filter input,
+.coordination-page .coordination-filter select {
+  height:46px;
+  min-width:0;
+  padding:0 12px;
+  border:1px solid #dfe3e9;
+  border-radius:12px;
+  background:#fff;
+  color:#303847;
+}
+.coordination-page .coordination-filter .ghost {
+  height:46px;
+  white-space:nowrap;
+}
+.coordination-page .table-panel { overflow:hidden; }
+.coordination-page .table-panel table { min-width:980px; }
+.coordination-page .table-panel th,
+.coordination-page .table-panel table td { white-space:nowrap; }
+@media(max-width:1050px) {
+  .coordination-page .coordination-filter > div:last-child { grid-template-columns:repeat(3,minmax(150px,1fr)); }
+}
+@media(max-width:680px) {
+  .coordination-page .coordination-filter > div:last-child { grid-template-columns:1fr; }
+  .coordination-page > .form-hero { padding:16px; }
+}
