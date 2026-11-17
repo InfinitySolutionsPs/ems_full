@@ -2039,21 +2039,31 @@ function AuditLogView() {
 function BackupsView() {
   const [status, setStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
+  const [running, setRunning] = useState(false);\n  const [saving, setSaving] = useState(false);\n  const [email, setEmail] = useState("");\n  const [schedule, setSchedule] = useState("daily");\n  const [automatic, setAutomatic] = useState(true);
   const load = useCallback(async () => {
     try {
       const response = await fetch("/api/backups", { cache: "no-store" });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "تعذر تحميل حالة النسخ الاحتياطي");
-      setStatus(result);
+      setStatus(result);\n      setEmail(result.backup_email || result.email || "");\n      setSchedule(result.backup_schedule || result.schedule || "daily");\n      setAutomatic(result.backup_automatic !== false && result.automatic !== false);
     } catch (error) { setStatus({ status: "unavailable", error: String(error).replace(/^Error: /, "") }); }
     finally { setLoading(false); }
   }, []);
   useEffect(() => { void load(); const timer = window.setInterval(() => void load(), 15000); return () => window.clearInterval(timer); }, [load]);
+  const saveSettings = async (e: React.FormEvent) => {
+    e.preventDefault(); setSaving(true);
+    try {
+      const response = await fetch("/api/backups", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "configure", email, schedule, automatic }) });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "تعذر حفظ الإعدادات");
+      toast.success("تم حفظ إعدادات النسخ الاحتياطي"); await load();
+    } catch (error) { toast.error(String(error).replace(/^Error: /, "")); }
+    finally { setSaving(false); }
+  };
   const createBackup = async () => {
     setRunning(true);
     try {
-      const response = await fetch("/api/backups", { method: "POST" });
+      const response = await fetch("/api/backups", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ action: "run" }) });
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || "تعذر بدء النسخ الاحتياطي");
       toast.success("بدأ إنشاء النسخة الاحتياطية. ستظهر حالتها تلقائيًا هنا.");
@@ -2066,6 +2076,7 @@ function BackupsView() {
   const statusClass = status?.status === "running" ? "running" : status?.status === "success" ? "success" : status?.status === "failed" ? "failed" : "pending";
   return <div className="page-stack backup-page">
     <section className="panel backup-hero"><div className="backup-icon"><Archive/></div><div><h2>النسخ الاحتياطي لنظام EMS</h2><p>نسخة يومية تلقائية الساعة 02:00 بتوقيت فلسطين، مع إمكانية الإنشاء عند الطلب.</p></div><button className="primary" onClick={()=>void createBackup()} disabled={running||status?.status==="running"}><Archive/>{running||status?.status==="running"?"جارٍ التنفيذ…":"إنشاء نسخة الآن"}</button></section>
+    <form className="panel backup-settings-form" onSubmit={saveSettings}><div className="panel-title"><CloudUpload/><div><b>إعداد النسخ التلقائي</b><small>أدخل البريد مرة واحدة وحدد دورية النسخ</small></div></div><div className="backup-settings-grid"><label>بريد OneDrive for Business<input required type="email" value={email} onChange={(e)=>setEmail(e.target.value)} placeholder="name@prcs.ps"/></label><label>دورية النسخ<select value={schedule} onChange={(e)=>setSchedule(e.target.value)}><option value="hourly">كل ساعة</option><option value="daily">يوميًا</option><option value="weekly">أسبوعيًا</option><option value="monthly">شهريًا</option></select></label><label className="backup-toggle"><input type="checkbox" checked={automatic} onChange={(e)=>setAutomatic(e.target.checked)}/><span>تفعيل النسخ التلقائي</span></label></div><div className="capacity-actions"><button className="primary" disabled={saving}>{saving?"جارٍ الحفظ…":"حفظ الإعدادات"}</button></div></form>
     <section className="backup-cards"><article className="panel"><small>حالة آخر نسخة</small><strong className={`backup-status ${statusClass}`}><i/>{loading?"جارٍ الفحص…":statusLabel[status?.status]||"الحالة غير معروفة"}</strong></article><article className="panel"><small>آخر تشغيل</small><strong className="latin-datetime">{dateTime(status?.finished_at||status?.started_at)}</strong></article><article className="panel"><small>وجهة التخزين</small><strong>{status?.cloud_uploaded?"OneDrive for Business + نسخة محلية":status?.cloud_configured?"OneDrive مهيأ — بانتظار النسخة القادمة":"OneDrive يحتاج إعدادًا لمرة واحدة"}</strong></article></section>
     <section className="panel backup-details"><div><h3>محتوى النسخة</h3><p>قاعدة بيانات PostgreSQL ومجلد المرفقات. تُحفظ نسخة محلية على volume مستقل، وتُرفع إلى OneDrive عند إعداد الربط.</p><div className="backup-retention"><span>النسخ المحلية: آخر 7 أيام</span><span>OneDrive: آخر 30 يومًا</span><span>تُنفذ تلقائيًا يوميًا دون تدخل</span></div>{status?.filename&&<small className="backup-file latin-datetime">آخر ملف: {status.filename} · الحجم: {Math.max(1,Math.round(Number(status.size_bytes||0)/1024/1024))} MB</small>}{status?.cloud_message&&<small className="backup-cloud-note">{status.cloud_message}</small>}{status?.error&&<div className="backup-error">{status.error}</div>}</div><div className="backup-actions"><button className="ghost" onClick={()=>void load()}><RefreshCw/> تحديث الحالة</button><a className={`ghost ${status?.filename?"":"disabled"}`} href={status?.filename?"/api/backups?download=latest":undefined} aria-disabled={!status?.filename}><Download/> تنزيل آخر نسخة</a></div></section>
     {!status?.cloud_configured&&<section className="backup-setup-note"><CloudUpload/><div><b>يلزم إعداد OneDrive مرة واحدة على الخادم</b><p>أضيفي في إعدادات Coolify المتغيرات BACKUP_API_TOKEN وONEDRIVE_TOKEN_JSON وONEDRIVE_DRIVE_ID وعبارة BACKUP_ENCRYPTION_PASSWORD. بعد ذلك تُرفع النسخ مشفّرة تلقائيًا إلى OneDrive.</p></div></section>}
