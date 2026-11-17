@@ -67,20 +67,20 @@ export async function GET(request:NextRequest) {
   const access=await getAccess(request);if(!access.profile)return NextResponse.json({error:"يرجى تسجيل الدخول"},{status:401});
   await env.DB.batch([
     env.DB.prepare(
-      "INSERT OR IGNORE INTO stations (code,name,governorate) VALUES (?,?,?)",
-    ).bind("JAB", "محطة جباليا", "شمال غزة"),
+      "INSERT INTO stations (code,name,governorate) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM system_settings WHERE key=?) AND NOT EXISTS (SELECT 1 FROM stations WHERE code=?)",
+    ).bind("JAB", "محطة جباليا", "شمال غزة", "deleted_station_JAB", "JAB"),
     env.DB.prepare(
-      "INSERT OR IGNORE INTO stations (code,name,governorate) VALUES (?,?,?)",
-    ).bind("GAZ", "محطة غزة", "غزة"),
+      "INSERT INTO stations (code,name,governorate) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM system_settings WHERE key=?) AND NOT EXISTS (SELECT 1 FROM stations WHERE code=?)",
+    ).bind("GAZ", "محطة غزة", "غزة", "deleted_station_GAZ", "GAZ"),
     env.DB.prepare(
-      "INSERT OR IGNORE INTO stations (code,name,governorate) VALUES (?,?,?)",
-    ).bind("DEI", "محطة دير البلح", "الوسطى"),
+      "INSERT INTO stations (code,name,governorate) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM system_settings WHERE key=?) AND NOT EXISTS (SELECT 1 FROM stations WHERE code=?)",
+    ).bind("DEI", "محطة دير البلح", "الوسطى", "deleted_station_DEI", "DEI"),
     env.DB.prepare(
-      "INSERT OR IGNORE INTO stations (code,name,governorate) VALUES (?,?,?)",
-    ).bind("KHA", "محطة خانيونس", "خانيونس"),
+      "INSERT INTO stations (code,name,governorate) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM system_settings WHERE key=?) AND NOT EXISTS (SELECT 1 FROM stations WHERE code=?)",
+    ).bind("KHA", "محطة خانيونس", "خانيونس", "deleted_station_KHA", "KHA"),
     env.DB.prepare(
-      "INSERT OR IGNORE INTO stations (code,name,governorate) VALUES (?,?,?)",
-    ).bind("RAF", "محطة رفح", "رفح"),
+      "INSERT INTO stations (code,name,governorate) SELECT ?,?,? WHERE NOT EXISTS (SELECT 1 FROM system_settings WHERE key=?) AND NOT EXISTS (SELECT 1 FROM stations WHERE code=?)",
+    ).bind("RAF", "محطة رفح", "رفح", "deleted_station_RAF", "RAF"),
   ]);
   const referenceDefaults = [
     ["hospital_public_shifa","مجمع الشفاء الطبي","مجمع الشفاء الطبي","hospital_public"],
@@ -414,7 +414,7 @@ export async function DELETE(request: NextRequest) {
           env.DB.prepare("UPDATE staff SET station_id=NULL WHERE station_id=?").bind(id),
         ]);
       }
-      await env.DB.prepare("DELETE FROM stations WHERE id=?").bind(id).run();
+      await env.DB.batch([env.DB.prepare("DELETE FROM stations WHERE id=?").bind(id),env.DB.prepare("INSERT INTO system_settings (key,value,label,category,updated_by) VALUES (?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP").bind("deleted_station_"+String((await env.DB.prepare("SELECT code FROM stations WHERE id=?").bind(id).first<any>())?.code||id),"1","محطة محذوفة","_deleted",access.email)]);
     } else if (entity === "vehicle") {
       if (!id) return NextResponse.json({ error: "المركبة غير محددة" }, { status: 400 });
       const vehicle = await env.DB.prepare("SELECT id,plate_number FROM vehicles WHERE id=?").bind(id).first<any>();
