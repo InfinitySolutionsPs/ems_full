@@ -4067,6 +4067,24 @@ function ReportsV2({
     const csv=[[`الفترة: ${filters.from}${timeRange} إلى ${filters.to}${timeRange}`],[...keys.map(key=>labels[key])],...rows.map((row:any)=>keys.map(key=>row[key])),keys.map(key=>totals[key])].map((line:any[])=>line.map((value:any)=>`"${String(value??"").replaceAll('"','""')}"`).join(",")).join("\n");
     const blob=new Blob(["\ufeff"+csv],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`${kind}-${filters.from}-${filters.to}.csv`;a.click();URL.revokeObjectURL(a.href);
   };
+  const exportDailyReport = () => {
+    const centers=(settingsData.centers||[]).filter((center:any)=>center.active!==0);
+    const stations=settingsData.stations||[];
+    const rows:any[]=[];
+    const count=(records:any[], predicate:(x:any)=>boolean)=>records.filter(predicate).length;
+    centers.forEach((center:any)=>{
+      const centerNames=new Set(stations.filter((s:any)=>Number(s.center_id)===Number(center.id)).map((s:any)=>String(s.name)));
+      const records=reportIncidents.filter((x:any)=>centerNames.has(String(x.station||"")));
+      ["A","B","C"].forEach(shift=>{
+        const r=records.filter((x:any)=>String(x.shift||"").toUpperCase()===shift);
+        rows.push({center:center.name,shift,carAccidents:count(r,x=>x.category==="Accident"),deliveries:count(r,x=>x.category==="Delivery"),emergencyOther:count(r,x=>x.category==="Other"||!x.category),medical:count(r,x=>x.category==="Medical"),injuries:count(r,x=>x.category==="Trauma"),martyrs:count(r,x=>x.category==="Martyr"),cpr:count(r,x=>Boolean(x.cpr)),dc:count(r,x=>Boolean(x.dc)),delivered:count(r,x=>Boolean(x.delivered||x.delivery_completed)),notMoved:count(r,x=>Boolean(x.not_moved||x.cancelled_before_move)),total:r.length});
+      });
+    });
+    const headers=["المركز","الوردية","حادث سير","ولادة","أخرى طارئة","حالات مرضية","إصابات","شهداء","CPR","DC","تمت الولادة","لم ينقل","المجموع"];
+    const lines=[[`التقرير اليومي لتصنيف الحالات — من ${filters.from} ${filters.fromTime||"00:00"} إلى ${filters.to} ${filters.toTime||"23:59"}`],headers,...rows.map(r=>[r.center,r.shift,r.carAccidents,r.deliveries,r.emergencyOther,r.medical,r.injuries,r.martyrs,r.cpr,r.dc,r.delivered,r.notMoved,r.total])];
+    const csv=lines.map((line:any[])=>line.map((v:any)=>`"${String(v??"").replaceAll('"','""')}"`).join(",")).join("\n");
+    const blob=new Blob(["\\ufeff"+csv],{type:"text/csv;charset=utf-8"});const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`ems-daily-${filters.from}.csv`;a.click();URL.revokeObjectURL(a.href);
+  };
   const exportCoordination = async () => {
     const r = await fetch(
       `/api/coordinations?from=${filters.from}&to=${filters.to}`,
@@ -4112,9 +4130,16 @@ function ReportsV2({
     | "coordination"
     | "periodic"
     | "field_response"
+    | "daily"
     | null
   >(null);
   const reports = [
+    {
+      id: "daily",
+      t: "التقرير اليومي لتصنيف الحالات",
+      d: "نموذج EMS اليومي حسب المركز والوردية وتصنيف الحالات",
+      i: FileBarChart,
+    },
     {
       id: "periodic",
       t: "التقرير الدوري للموارد",
@@ -4202,7 +4227,7 @@ function ReportsV2({
             <button
               className="primary"
               onClick={
-                selected === "coordination" ? exportCoordination : selected === "fuel" ? () => document.getElementById("fuel-report-export")?.click() : selected === "movement" ? () => document.getElementById("movement-report-export")?.click() : selected === "periodic" || selected === "field_response" ? ()=>exportStructuredReport(selected) : exportCsv
+                selected === "coordination" ? exportCoordination : selected === "fuel" ? () => document.getElementById("fuel-report-export")?.click() : selected === "movement" ? () => document.getElementById("movement-report-export")?.click() : selected === "periodic" || selected === "field_response" ? ()=>exportStructuredReport(selected) : selected === "daily" ? ()=>exportDailyReport() : exportCsv
               }
             >
               <Download /> تصدير Excel
@@ -4295,6 +4320,25 @@ function ReportContent({
       .then((v) => v && setCoordination(v))
       .catch(() => {});
   }, [filters.from, filters.to]);
+  if(type==="daily"){
+    const centers=(settingsData.centers||[]).filter((center:any)=>center.active!==0);
+    const stations=settingsData.stations||[];
+    const rows:any[]=[];
+    centers.forEach((center:any)=>{
+      const names=new Set(stations.filter((s:any)=>Number(s.center_id)===Number(center.id)).map((s:any)=>String(s.name)));
+      const records=incidents.filter((x:any)=>names.has(String(x.station||"")));
+      ["A","B","C"].forEach(shift=>{
+        const r=records.filter((x:any)=>String(x.shift||"").toUpperCase()===shift);
+        const n=(p:(x:any)=>boolean)=>r.filter(p).length;
+        rows.push({center:center.name,shift,acc:n(x=>x.category==="Accident"),birth:n(x=>x.category==="Delivery"),other:n(x=>x.category==="Other"||!x.category),medical:n(x=>x.category==="Medical"),injury:n(x=>x.category==="Trauma"),martyr:n(x=>x.category==="Martyr"),cpr:n(x=>Boolean(x.cpr)),dc:n(x=>Boolean(x.dc)),delivered:n(x=>Boolean(x.delivered||x.delivery_completed)),notMoved:n(x=>Boolean(x.not_moved||x.cancelled_before_move)),total:r.length});
+      });
+    });
+    const total=(key:string)=>rows.reduce((s:number,r:any)=>s+Number(r[key]||0),0);
+    return <section className="panel table-panel report-sheet daily-report" dir="rtl">
+      <div className="formal-report-head"><HeartPulse/><div><b>جمعية الهلال الأحمر الفلسطيني</b><span>دائرة الإسعاف والطوارئ</span><h2>تقرير تصنيف الحالات اليومية لمراكز الإسعاف</h2><p>من {filters.from} الساعة {filters.fromTime||"00:00"} إلى {filters.to} الساعة {filters.toTime||"23:59"}</p></div></div>
+      <div className="table-wrap"><table><thead><tr><th>المركز</th><th>الوردية</th><th>حادث سير</th><th>ولادة</th><th>أخرى طارئة</th><th>حالات مرضية</th><th>إصابات</th><th>شهداء</th><th>CPR</th><th>DC</th><th>تمت الولادة</th><th>لم ينقل</th><th>المجموع</th></tr></thead><tbody>{rows.map((r:any)=><tr key={r.center+r.shift}><td><b>{r.center}</b></td><td>{r.shift}</td><td>{r.acc}</td><td>{r.birth}</td><td>{r.other}</td><td>{r.medical}</td><td>{r.injury}</td><td>{r.martyr}</td><td>{r.cpr}</td><td>{r.dc}</td><td>{r.delivered}</td><td>{r.notMoved}</td><td><b>{r.total}</b></td></tr>)}<tr className="report-total-row"><td colSpan={2}>الإجمالي</td>{["acc","birth","other","medical","injury","martyr","cpr","dc","delivered","notMoved","total"].map(k=><td key={k}>{total(k)}</td>)}</tr></tbody></table></div>
+    </section>;
+  }
   if(type==="periodic"||type==="field_response"){
     const centers=(settingsData.centers||[]).filter((center:any)=>center.active!==0);
     const stations=settingsData.stations||[];
