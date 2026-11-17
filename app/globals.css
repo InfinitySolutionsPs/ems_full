@@ -2657,3 +2657,20 @@ tbody tr:hover {
 .daily-report thead tr:first-child th[colspan]{text-align:center!important;vertical-align:middle!important;letter-spacing:0}
 .daily-report thead tr:first-child th[rowspan]{text-align:center!important;vertical-align:middle!important}
 .daily-report thead tr:nth-child(2) th{text-align:center!important;vertical-align:middle!important}
+
+@media print {
+  @page { size: A4 landscape; margin: 8mm; }
+  body { background:#fff!important; }
+  .sidebar,.menu-btn,header,.report-detail-head .ghost,.report-export,.report-period-picker,.filters-panel { display:none!important; }
+  .main { margin:0!important; padding:0!important; width:100%!important; }
+  .daily-report { box-shadow:none!important; border:0!important; width:100%!important; max-width:none!important; padding:0!important; }
+  .daily-report .formal-report-head { margin-bottom:6px!important; }
+  .daily-report .table-wrap { overflow:visible!important; width:100%!important; }
+  .daily-report table { width:100%!important; min-width:0!important; table-layout:fixed!important; font-size:7px!important; }
+  .daily-report th,.daily-report td { padding:3px 2px!important; white-space:normal!important; word-break:break-word!important; line-height:1.15!important; }
+  .daily-report th { font-size:7px!important; }
+  .daily-report .report-center-cell { min-width:0!important; font-size:8px!important; }
+  .daily-report .formal-report-head h2 { font-size:15px!important; }
+  .daily-report .formal-report-head p { font-size:9px!important; }
+  .daily-report tr { break-inside:avoid; }
+}
