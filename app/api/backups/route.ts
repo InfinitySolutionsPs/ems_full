@@ -50,8 +50,17 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const { access, allowed } = await authorized(request);
-  if (!allowed) return NextResponse.json({ error: "لا تملك صلاحية إنشاء النسخ الاحتياطية" }, { status: 403 });
+  if (!allowed) return NextResponse.json({ error: "لا تملك صلاحية إدارة النسخ الاحتياطية" }, { status: 403 });
   try {
+    const body = await request.json().catch(() => ({})) as { action?: string; email?: string; schedule?: string; automatic?: boolean };
+    if (body.action === "configure") {
+      if (!body.email || !/^\\S+@\\S+\\.\\S+$/.test(body.email)) return NextResponse.json({ error: "يرجى إدخال بريد إلكتروني صحيح" }, { status: 400 });
+      if (!["hourly","daily","weekly","monthly"].includes(String(body.schedule))) return NextResponse.json({ error: "دورية النسخ غير صالحة" }, { status: 400 });
+      const response = await serviceRequest("/config", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: body.email, schedule: body.schedule, automatic: body.automatic !== false }) });
+      const result = await response.json();
+      if (!response.ok) return NextResponse.json(result, { status: response.status });
+      return NextResponse.json(result);
+    }
     const response = await serviceRequest("/run", { method: "POST" });
     const result = await response.json();
     if (!response.ok) return NextResponse.json(result, { status: response.status });
