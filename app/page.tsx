@@ -3068,357 +3068,79 @@ function OperationalCapacity({ data }: { data: any }) {
 }
 
 function CoordinationView() {
-  const [from, setFrom] = useState("2026-08-01"),
-    [to, setTo] = useState(today),
-    [agency, setAgency] = useState("all"),
-    [data, setData] = useState<any>({
-      records: [],
-      summary: {},
-      agencies: [],
-      types: [],
-      timeline: [],
-    });
-  const empty = {
-    coordinationDate: today,
-    coordinatingAgency: "WHO",
-    vehicleCount: "",
-    coordinationType: "نقل مرضى الى معبر رفح",
-    resultDescription: "",
-    ambulancePatients: "",
-    ambulanceCompanions: "",
-    busPatients: "",
-    coordinationStatus: "نجح",
-    participatingVehicles: "",
-    notesPatients: "",
-    notesCompanions: "",
-    notesTotal: "",
-    notes: "",
-  };
-  const [draft, setDraft] = useState<any>(empty);
-  const [incidentRecords, setIncidentRecords] = useState<any[]>([]);
+  const [from, setFrom] = useState(today);
+  const [to, setTo] = useState(today);
+  const [agency, setAgency] = useState("all");
+  const [coordinationType, setCoordinationType] = useState("all");
+  const [approvalStatus, setApprovalStatus] = useState("all");
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+
   const load = useCallback(async () => {
-    const [coordinationResponse, incidentsResponse] = await Promise.all([
-      fetch(`/api/coordinations?from=${from}&to=${to}&agency=${encodeURIComponent(agency)}`),
-      fetch(`/api/incidents?from=${from}&to=${to}&incidentStatus=coordination`),
-    ]);
-    if (coordinationResponse.ok) setData(await coordinationResponse.json());
-    if (incidentsResponse.ok) {
-      const result = await incidentsResponse.json();
-      setIncidentRecords(result.incidents || []);
+    setLoading(true);
+    try {
+      const response = await fetch(`/api/incidents?from=${from}&to=${to}&incidentStatus=coordination`);
+      if (!response.ok) throw new Error("load");
+      const result = await response.json();
+      setRecords(result.incidents || []);
+      setPage(1);
+    } catch {
+      toast.error("تعذر تحميل بلاغات التنسيق");
+    } finally {
+      setLoading(false);
     }
-  }, [from, to, agency]);
-  useEffect(() => {
-    load();
-  }, [load]);
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const r = await fetch("/api/coordinations", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(draft),
-    });
-    const result = await r.json();
-    if (!r.ok) return toast.error(result.error || "تعذر حفظ التنسيق");
-    toast.success("تم حفظ عملية التنسيق");
-    setDraft({ ...empty, coordinationDate: today });
-    load();
-  };
-  const s = data.summary || {};
+  }, [from, to]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filtered = useMemo(() => records.filter((x: any) => {
+    const matchesAgency = agency === "all" || String(x.coordinationAgency || "") === agency;
+    const matchesType = coordinationType === "all" || String(x.coordinationType || "") === coordinationType;
+    const matchesApproval = approvalStatus === "all" || String(x.approval_status || "") === approvalStatus;
+    return matchesAgency && matchesType && matchesApproval;
+  }), [records, agency, coordinationType, approvalStatus]);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const visible = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const pageNumbers = Array.from({length: totalPages}, (_, i) => i + 1);
+  const agencyLabel: Record<string,string> = { WHO:"WHO", OCHA:"OCHA", red_cross:"الصليب الأحمر", other:"أخرى" };
+  const typeLabel: Record<string,string> = { yellow_line:"تنسيق الخط الأصفر", evacuation:"تنسيق إجلاء", returnees:"تنسيق عائدين" };
+  const totalPatients = filtered.reduce((sum, x) => sum + Number(x.beneficiary_count || x.ambulance_patients || 0), 0);
+  const totalVehicles = filtered.filter((x) => x.vehicle || x.vehicle_id).length;
   return (
     <div className="page-stack coordination-page">
       <section className="form-hero">
-        <div className="round-icon large">
-          <Route />
-        </div>
-        <div>
-          <h2>تسجيل عمليات التنسيق</h2>
-          <p>نموذج مطابق لحقول تقرير التنسيقات ويحدّث التقرير مباشرة</p>
-        </div>
+        <div className="round-icon large"><Route /></div>
+        <div><h2>التنسيقات</h2><p>بلاغات التنسيق المسجلة بالنظام فقط</p></div>
       </section>
-      <form className="panel coordination-form" onSubmit={save}>
-        <PanelTitle
-          icon={Route}
-          title="بيانات عملية التنسيق"
-          subtitle="التاريخ والجهة وحركة المرضى والمركبات"
-        />
-        <div className="coordination-fields">
-          <label>
-            التاريخ
-            <input
-              required
-              type="date"
-              value={draft.coordinationDate}
-              onChange={(e) =>
-                setDraft({ ...draft, coordinationDate: e.target.value })
-              }
-            />
-          </label>
-          <label>
-            الجهة المنسقة
-            <select
-              value={draft.coordinatingAgency}
-              onChange={(e) =>
-                setDraft({ ...draft, coordinatingAgency: e.target.value })
-              }
-            >
-              {["WHO", "OCHA", "الصليب الأحمر", "وزارة الصحة", "جهة أخرى"].map(
-                (x) => (
-                  <option key={x}>{x}</option>
-                ),
-              )}
-            </select>
-          </label>
-          <label>
-            عدد السيارات
-            <input
-              type="number"
-              min="0"
-              value={draft.vehicleCount}
-              onChange={(e) =>
-                setDraft({ ...draft, vehicleCount: e.target.value })
-              }
-            />
-          </label>
-          <label>
-            حالة التنسيق
-            <select
-              value={draft.coordinationStatus}
-              onChange={(e) =>
-                setDraft({ ...draft, coordinationStatus: e.target.value })
-              }
-            >
-              <option>نجح</option>
-              <option>فشل</option>
-              <option>قيد المتابعة</option>
-            </select>
-          </label>
-          <label className="span-2">
-            طبيعة التنسيق
-            <input
-              required
-              value={draft.coordinationType}
-              onChange={(e) =>
-                setDraft({ ...draft, coordinationType: e.target.value })
-              }
-            />
-          </label>
-          <label className="span-2">
-            نتيجة التنسيق
-            <input
-              value={draft.resultDescription}
-              onChange={(e) =>
-                setDraft({ ...draft, resultDescription: e.target.value })
-              }
-            />
-          </label>
-          <label>
-            مرضى بالإسعاف
-            <input
-              type="number"
-              min="0"
-              value={draft.ambulancePatients}
-              onChange={(e) =>
-                setDraft({ ...draft, ambulancePatients: e.target.value })
-              }
-            />
-          </label>
-          <label>
-            مرافقون بالإسعاف
-            <input
-              type="number"
-              min="0"
-              value={draft.ambulanceCompanions}
-              onChange={(e) =>
-                setDraft({ ...draft, ambulanceCompanions: e.target.value })
-              }
-            />
-          </label>
-          <label>
-            مرضى بالحافلة
-            <input
-              type="number"
-              min="0"
-              value={draft.busPatients}
-              onChange={(e) =>
-                setDraft({ ...draft, busPatients: e.target.value })
-              }
-            />
-          </label>
-          <label>
-            الإجمالي بالملاحظات
-            <input
-              type="number"
-              min="0"
-              value={draft.notesTotal}
-              onChange={(e) =>
-                setDraft({ ...draft, notesTotal: e.target.value })
-              }
-            />
-          </label>
-          <label className="span-2">
-            أرقام المركبات المشاركة
-            <input
-              value={draft.participatingVehicles}
-              onChange={(e) =>
-                setDraft({ ...draft, participatingVehicles: e.target.value })
-              }
-              placeholder="مثال: 260-261-2001"
-            />
-          </label>
-          <label className="span-2">
-            ملاحظات
-            <input
-              value={draft.notes}
-              onChange={(e) => setDraft({ ...draft, notes: e.target.value })}
-            />
-          </label>
-        </div>
-        <div className="capacity-actions">
-          <button className="primary">
-            <Save /> حفظ التنسيق
-          </button>
-        </div>
-      </form>
       <section className="panel coordination-filter">
-        <PanelTitle
-          icon={Filter}
-          title="عرض التنسيقات"
-          subtitle="فلترة السجل حسب الفترة والجهة"
-        />
+        <PanelTitle icon={Filter} title="فلاتر بلاغات التنسيق" subtitle="حدد الفترة والجهة والنوع وحالة البلاغ" />
         <div>
-          <label>
-            من
-            <input
-              type="date"
-              value={from}
-              onChange={(e) => setFrom(e.target.value)}
-            />
-          </label>
-          <label>
-            إلى
-            <input
-              type="date"
-              value={to}
-              onChange={(e) => setTo(e.target.value)}
-            />
-          </label>
-          <label>
-            الجهة
-            <select value={agency} onChange={(e) => setAgency(e.target.value)}>
-              <option value="all">جميع الجهات</option>
-              {data.agencies.map((x: any) => (
-                <option key={x.name}>{x.name}</option>
-              ))}
-            </select>
-          </label>
+          <label>من تاريخ<input type="date" value={from} onChange={(e) => { setFrom(e.target.value); setPage(1); }} /></label>
+          <label>إلى تاريخ<input type="date" min={from} value={to} onChange={(e) => { setTo(e.target.value); setPage(1); }} /></label>
+          <label>جهة التنسيق<select value={agency} onChange={(e) => { setAgency(e.target.value); setPage(1); }}><option value="all">جميع الجهات</option><option value="WHO">WHO</option><option value="OCHA">OCHA</option><option value="red_cross">الصليب الأحمر</option><option value="other">أخرى</option></select></label>
+          <label>نوع التنسيق<select value={coordinationType} onChange={(e) => { setCoordinationType(e.target.value); setPage(1); }}><option value="all">جميع الأنواع</option><option value="yellow_line">تنسيق الخط الأصفر</option><option value="evacuation">تنسيق إجلاء</option><option value="returnees">تنسيق عائدين</option></select></label>
+          <label>حالة البلاغ<select value={approvalStatus} onChange={(e) => { setApprovalStatus(e.target.value); setPage(1); }}><option value="all">كل الحالات</option><option value="draft">مسودة</option><option value="approved">معتمد</option></select></label>
+          <button type="button" className="ghost" onClick={load}><RefreshCw /> تحديث</button>
         </div>
       </section>
       <section className="report-metrics">
-        <article>
-          <Route />
-          <b>{s.total || 0}</b>
-          <span>عمليات التنسيق</span>
-        </article>
-        <article>
-          <Ambulance />
-          <b>{s.vehicles || 0}</b>
-          <span>مشاركة مركبات</span>
-        </article>
-        <article>
-          <UsersRound />
-          <b>{s.patients || 0}</b>
-          <span>مرضى بالإسعاف</span>
-        </article>
-        <article>
-          <UserRound />
-          <b>{s.companions || 0}</b>
-          <span>مرافقون بالإسعاف</span>
-        </article>
+        <article><Route /><b>{filtered.length}</b><span>بلاغات التنسيق</span></article>
+        <article><Ambulance /><b>{totalVehicles}</b><span>بلاغات مرتبطة بمركبة</span></article>
+        <article><UsersRound /><b>{totalPatients}</b><span>المستفيدون</span></article>
       </section>
       <section className="panel table-panel">
-        <PanelTitle
-          icon={ClipboardList}
-          title="سجل التنسيقات"
-          subtitle={`${data.records.length} سجلًا ضمن الفترة`}
-        />
+        <PanelTitle icon={ClipboardList} title="بلاغات التنسيق" subtitle={`عرض ${filtered.length ? (page - 1) * pageSize + 1 : 0}-${Math.min(page * pageSize, filtered.length)} من ${filtered.length}`} />
         <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>التاريخ</th>
-                <th>الجهة</th>
-                <th>طبيعة التنسيق</th>
-                <th>السيارات</th>
-                <th>المرضى</th>
-                <th>المرافقون</th>
-                <th>الحالة</th>
-                <th>أرقام المركبات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.records.map((x: any) => (
-                <tr key={x.id}>
-                  <td>{x.coordination_date}</td>
-                  <td>
-                    <b>{x.coordinating_agency}</b>
-                  </td>
-                  <td>{x.coordination_type}</td>
-                  <td>{x.vehicle_count}</td>
-                  <td>{x.ambulance_patients}</td>
-                  <td>{x.ambulance_companions}</td>
-                  <td>
-                    <span
-                      className={
-                        x.coordination_status === "نجح"
-                          ? "state active"
-                          : "state"
-                      }
-                    >
-                      {x.coordination_status}
-                    </span>
-                  </td>
-                  <td>{x.participating_vehicles || "—"}</td>
-                </tr>
-              ))}
-            </tbody>
+          <table><thead><tr><th>كود البلاغ</th><th>التاريخ والوقت</th><th>جهة التنسيق</th><th>نوع التنسيق</th><th>المستفيد</th><th>المركز</th><th>حالة البلاغ</th></tr></thead>
+            <tbody>{loading ? <tr><td colSpan={7}><div className="empty-state">جارٍ التحميل…</div></td></tr> : visible.map((x: any) => <tr key={x.id}><td><b>{x.incident_code || x.incident_number || "—"}</b></td><td><span className="latin-datetime">{x.call_date} {x.call_time || ""}</span></td><td>{agencyLabel[String(x.coordinationAgency)] || x.coordinationAgency || "—"}</td><td>{typeLabel[String(x.coordinationType)] || x.coordinationType || "—"}</td><td>{x.beneficiary_name || "دون مستفيد"}</td><td>{x.center_name || x.station || "—"}</td><td><span className={`approval-status-badge ${x.approval_status === "draft" ? "draft" : "approved"}`}>{x.approval_status === "draft" ? "مسودة" : "معتمد"}</span></td></tr>)}{!loading && !visible.length && <tr><td colSpan={7}><Empty /></td></tr>}</tbody>
           </table>
-          {!data.records.length && <Empty />}
         </div>
-      </section>
-      <section className="panel table-panel">
-        <PanelTitle
-          icon={Route}
-          title="بلاغات التنسيق"
-          subtitle={`${incidentRecords.length} بلاغ تنسيق ضمن الفترة المحددة`}
-        />
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>كود البلاغ</th>
-                <th>التاريخ والوقت</th>
-                <th>جهة التنسيق</th>
-                <th>نوع التنسيق</th>
-                <th>المستفيد</th>
-                <th>المركز/المحطة</th>
-                <th>حالة الحفظ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {incidentRecords.map((x: any) => (
-                <tr key={x.id}>
-                  <td><b>{x.incident_code || x.incident_number}</b></td>
-                  <td><span className="latin-datetime">{x.call_date}<br />{x.call_time || "—"}</span></td>
-                  <td>{({ WHO:"WHO", OCHA:"OCHA", red_cross:"الصليب الأحمر", other:"أخرى" } as Record<string,string>)[String(x.coordination_agency)] || x.coordination_agency || "—"}</td>
-                  <td>{({ yellow_line:"تنسيق الخط الأصفر", evacuation:"تنسيق إجلاء", returnees:"تنسيق عائدين" } as Record<string,string>)[String(x.coordination_type)] || x.coordination_type || "—"}</td>
-                  <td>{x.beneficiary_name || "دون مستفيد"}</td>
-                  <td>{x.center_name || x.station || "—"}</td>
-                  <td><span className={`approval-status-badge ${x.approval_status === "draft" ? "draft" : "approved"}`}>{x.approval_status === "draft" ? "مسودة" : "معتمد"}</span></td>
-                </tr>
-              ))}
-              {!incidentRecords.length && <tr><td colSpan={7}><Empty /></td></tr>}
-            </tbody>
-          </table>
+        <div className="pagination">
+          <label>عدد الصفوف<select value={pageSize} onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1); }}><option value={10}>10</option><option value={25}>25</option><option value={50}>50</option></select></label>
+          <span>الصفحة {page} من {totalPages}</span>
+          <div><button className="ghost" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>السابق</button>{pageNumbers.slice(Math.max(0, page - 3), Math.min(totalPages, page + 2)).map((n) => <button key={n} className={n === page ? "primary compact" : "ghost"} onClick={() => setPage(n)}>{n}</button>)}<button className="ghost" disabled={page >= totalPages} onClick={() => setPage((p) => Math.min(totalPages, p + 1))}>التالي</button></div>
         </div>
       </section>
     </div>
