@@ -100,7 +100,7 @@ export async function GET(request:NextRequest) {
   await env.DB.batch(referenceDefaults.map(([key,value,label,category])=>env.DB.prepare("INSERT INTO system_settings (key,value,label,category,updated_by) SELECT ?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM system_settings WHERE key=?) ON CONFLICT(key) DO NOTHING").bind(key,value,label,category,"system",`deleted__${key}`)));
   // Employee imports are explicit administrator actions. Never recreate deleted
   // employees while merely loading the settings screen.
-  await env.DB.prepare("INSERT INTO centers (name,governorate) SELECT DISTINCT governorate,governorate FROM stations WHERE governorate IS NOT NULL AND trim(governorate)<>'' ON CONFLICT(name) DO NOTHING").run();
+  await env.DB.prepare("INSERT INTO centers (name,governorate) SELECT DISTINCT s.governorate,s.governorate FROM stations s WHERE s.governorate IS NOT NULL AND trim(s.governorate)<>'' AND NOT EXISTS (SELECT 1 FROM system_settings d WHERE d.key='deleted_center_'||s.governorate) ON CONFLICT(name) DO NOTHING").run();
   await env.DB.prepare("UPDATE stations SET center_id=(SELECT id FROM centers WHERE centers.name=stations.governorate LIMIT 1) WHERE center_id IS NULL").run();
   const centerRows = await env.DB.prepare("SELECT id,name FROM centers").all();
   const centerByName = new Map((centerRows.results as any[]).map((c:any)=>[employeeNameKey(c.name),Number(c.id)]));
@@ -401,7 +401,8 @@ export async function DELETE(request: NextRequest) {
           env.DB.prepare("DELETE FROM stations WHERE center_id=?").bind(id),
         ]);
       }
-      await env.DB.prepare("DELETE FROM centers WHERE id=?").bind(id).run();
+      const centerBeforeDelete = await env.DB.prepare("SELECT name FROM centers WHERE id=?").bind(id).first<any>();
+      await env.DB.batch([env.DB.prepare("DELETE FROM centers WHERE id=?").bind(id),env.DB.prepare("INSERT INTO system_settings (key,value,label,category,updated_by) VALUES (?,?,?,?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP").bind("deleted_center_"+String(centerBeforeDelete?.name||id),"1","مركز محذوف","_deleted",access.email)]);
     } else if (entity === "station") {
       if (!id) return NextResponse.json({ error: "المحطة غير محددة" }, { status: 400 });
       const stationBeforeDelete = await env.DB.prepare("SELECT code FROM stations WHERE id=?").bind(id).first<any>();
