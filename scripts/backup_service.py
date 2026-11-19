@@ -122,7 +122,7 @@ class Handler(BaseHTTPRequestHandler):
         email = str(body.get("email", "")).strip()
         schedule = body.get("schedule", "daily")
         automatic = bool(body.get("automatic", True))
-        if email and not re.fullmatch(r"[^\\s@]+@[^\\s@]+\\.[^\\s@]+", email):
+        if email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
             return self._json(400, {"error": "يرجى إدخال بريد إلكتروني صحيح"})
         if schedule not in ALLOWED_SCHEDULES:
             return self._json(400, {"error": "دورية النسخ غير صحيحة"})
