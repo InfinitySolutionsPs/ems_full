@@ -73,16 +73,16 @@ def main():
             digest = hasher.hexdigest()
             remote = "onedrive-crypt:"
             cloud_uploaded = False
-            cloud_message = "لم يتم إعداد OneDrive بعد"
+            cloud_message = "لم يتم إعداد OneDrive الشخصي بعد"
             remotes = subprocess.run(["rclone", "listremotes", "--config", RCLONE_CONFIG], capture_output=True, text=True)
             if "onedrive-crypt:" in remotes.stdout.splitlines():
                 try:
                     run(["rclone", "copyto", str(archive), f"{remote}/{name}", "--config", RCLONE_CONFIG, "--retries", "3", "--low-level-retries", "5"])
                     cloud_uploaded = True
-                    cloud_message = "تم الرفع إلى OneDrive for Business"
+                    cloud_message = "تم الرفع إلى OneDrive الشخصي"
                     run(["rclone", "delete", remote, "--min-age", "30d", "--config", RCLONE_CONFIG])
                 except subprocess.CalledProcessError as error:
-                    cloud_message = f"فشل رفع OneDrive (رمز {error.returncode})"
+                    cloud_message = f"فشل رفع OneDrive الشخصي (رمز {error.returncode})"
 
             cutoff = now - timedelta(days=7)
             for old_file in BACKUP_DIR.glob("ems-backup-*.tar.gz"):
