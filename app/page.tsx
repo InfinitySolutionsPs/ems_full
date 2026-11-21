@@ -117,14 +117,13 @@ const stations = [
   "محطة خانيونس",
   "محطة رفح",
 ];
-const categories = ["Medical", "Trauma", "Martyr", "Delivery", "Accident", "Other"];
+const categories = ["Medical", "Trauma", "Martyr", "Delivery", "Accident"];
 const categoryArabic: Record<string, string> = {
   Medical: "حالات مرضية",
   Trauma: "إصابات",
   Martyr: "شهيد",
   Delivery: "ولادة",
   Accident: "حوادث",
-  Other: "أخرى",
 };
 const urgencyArabic: Record<string, string> = {
   Red: "حمراء",
@@ -502,7 +501,6 @@ export default function HomePage() {
     { id: "dashboard", label: "الرئيسية", icon: Home, permission:"dashboard.view" },
     { id: "new", label: "تسجيل بلاغ", icon: PlusCircle, permission:"incidents.create" },
     { id: "records", label: "سجل البلاغات", icon: ClipboardList, permission:"incidents.view" },
-    { id: "capacity", label: "القدرة التشغيلية", icon: Gauge, permission:"capacity.view" },
     { id: "coordination", label: "التنسيقات", icon: Route, permission:"coordination.view" },
     { id: "training", label: "التدريب", icon: GraduationCap, permission:"training.view" },
     { id: "fleet", label: "المركبات والوقود", icon: Ambulance, permission:"fleet.view" },
