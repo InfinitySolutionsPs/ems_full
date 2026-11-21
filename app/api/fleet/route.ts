@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
     const canViewIncidents = hasPermission(access.profile,"incidents.view");
     const canViewMaintenance = hasPermission(access.profile,"maintenance.view");
     const [detailIncidents,detailFuel,detailMovements,detailMaintenance] = await Promise.all([
-      canViewIncidents ? env.DB.prepare(`SELECT id,incident_number,call_date,call_time,beneficiary_name,case_type,urgency,station,approval_status,incident_status,distance_km
+      canViewIncidents ? env.DB.prepare(`SELECT id,incident_number,call_date,call_time,beneficiary_name,case_type,urgency,station,approval_status,incident_status,km_start,km_end,distance_km
         FROM incidents WHERE vehicle_id=? OR TRIM(vehicle)=TRIM(?) ORDER BY call_date DESC,call_time DESC LIMIT 2000`).bind(detailVehicleId,vehicle.plate_number).all() : Promise.resolve({results:[]}),
       env.DB.prepare(`SELECT f.*,i.incident_number FROM fuel_fillings f LEFT JOIN incidents i ON i.id=f.incident_id
         WHERE f.vehicle_id=? ORDER BY f.filled_at DESC LIMIT 2000`).bind(detailVehicleId).all(),
