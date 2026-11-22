@@ -135,6 +135,8 @@ export async function POST(request: NextRequest) {
     if (!validDate(b.filledAt) || liters==null || !Number.isFinite(liters) || liters<=0 || !["بنزين","سولار"].includes(text(b.fuelType))) return reply("يرجى إدخال تاريخ وكمية صحيحة وتحديد نوع الوقود");
     await env.DB.prepare("UPDATE fuel_fillings SET filled_at=?,liters=?,fuel_type=?,odometer_km=?,driver_staff_id=?,driver_name=?,filled_by_staff_id=?,filled_by_name=?,source_name=?,voucher_number=?,notes=? WHERE id=?")
       .bind(b.filledAt,liters,text(b.fuelType),number(b.odometerKm),number(b.driverStaffId),text(b.driverName)||null,number(b.filledByStaffId),text(b.filledByName)||null,text(b.sourceName)||null,text(b.voucherNumber)||null,text(b.notes)||null,id).run();
+    const updatedOdometer = number(b.odometerKm);
+    if (updatedOdometer != null && Number.isFinite(updatedOdometer)) await env.DB.prepare("UPDATE vehicles SET mileage_km=? WHERE id=? AND (mileage_km IS NULL OR mileage_km<?)").bind(updatedOdometer,row.vehicle_id,updatedOdometer).run();
     await env.DB.prepare("INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,?,?,?,?)").bind(access.email,"update","fuel_filling",String(id),String(row.vehicle_id)).run();
     return NextResponse.json({ok:true});
   }
