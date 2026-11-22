@@ -112,6 +112,20 @@ export async function POST(request: NextRequest) {
     await env.DB.prepare("INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,?,?,?,?)").bind(access.email,"delete","fuel_filling",String(id),row.plate_number).run();
     return NextResponse.json({ok:true});
   }
+  if (b.action === "update_movement") {
+    const id = Number(b.id);
+    if (!Number.isInteger(id) || id < 1) return reply("حركة المركبة غير صالحة");
+    const row = await env.DB.prepare("SELECT id,vehicle_id,km_start FROM vehicle_movements WHERE id=?").bind(id).first<any>();
+    if (!row) return reply("حركة المركبة غير موجودة",404);
+    const end = number(b.kmEnd);
+    if (end != null && (!Number.isFinite(end) || end < Number(row.km_start || 0))) return reply("عداد النهاية يجب أن يكون أكبر أو يساوي عداد البداية");
+    if (!validDate(b.departedAt) || (b.returnedAt && (!validDate(b.returnedAt) || String(b.returnedAt) < String(b.departedAt)))) return reply("تاريخ الحركة غير صحيح");
+    await env.DB.prepare("UPDATE vehicle_movements SET departed_at=?,returned_at=?,km_start=?,km_end=?,destination=?,notes=? WHERE id=?")
+      .bind(b.departedAt,b.returnedAt||null,number(b.kmStart),end,text(b.destination)||null,text(b.notes)||null,id).run();
+    if (end != null) await env.DB.prepare("UPDATE vehicles SET mileage_km=? WHERE id=? AND (mileage_km IS NULL OR mileage_km<?)").bind(end,row.vehicle_id,end).run();
+    await env.DB.prepare("INSERT INTO audit_logs (actor,action,entity_type,entity_id,details) VALUES (?,?,?,?,?)").bind(access.email,"update","vehicle_movement",String(id),String(row.vehicle_id)).run();
+    return NextResponse.json({ok:true});
+  }
   if (b.action === "update_fill") {
     const id = Number(b.id);
     if (!Number.isInteger(id) || id < 1) return reply("سجل التعبئة غير صالح");
