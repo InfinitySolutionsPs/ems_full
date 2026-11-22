@@ -3252,6 +3252,8 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
   const [settingsVehiclePage, setSettingsVehiclePage] = useState(1);
   const [settingsVehiclePageSize, setSettingsVehiclePageSize] = useState(10);
   const [selectedStaff, setSelectedStaff] = useState<any>(null);
+  const [trainingRecords, setTrainingRecords] = useState<any[]>([]), [trainingAttendees, setTrainingAttendees] = useState<any[]>([]);
+  useEffect(() => { fetch("/api/trainings", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(v => { if (v) { setTrainingRecords(v.trainings || []); setTrainingAttendees(v.attendees || []); } }).catch(() => {}); }, []);
   const [cleaningStaff, setCleaningStaff] = useState(false);
   const [importingStaff, setImportingStaff] = useState(false);
   const staffImportRef = useRef<HTMLInputElement>(null);
@@ -3741,7 +3743,7 @@ function SettingsView2({ data, reload }: { data: any; reload: () => void }) {
           {selectedStaff && <div className="modal-backdrop" onMouseDown={event=>{if(event.target===event.currentTarget)setSelectedStaff(null)}}>
             <section className="incident-detail-modal staff-detail-modal" dir="rtl">
               <div className="modal-head"><div><h2>{selectedStaff.full_name}</h2><p>الملف الكامل للموظف</p></div><button type="button" className="icon-btn" onClick={()=>setSelectedStaff(null)}><X/></button></div>
-              <div className="staff-detail-grid">{selectedStaffFields.map(([label,value])=><article key={String(label)} className={label==="ملاحظات"?"wide":""}><span>{label}</span><b>{value || "—"}</b></article>)}</div>
+              <div className="staff-detail-grid">{selectedStaffFields.map(([label,value])=><article key={String(label)} className={label==="ملاحظات"?"wide":""}><span>{label}</span><b>{value || "—"}</b></article>)}</div><section className="staff-training-history"><h3>التدريبات</h3><div className="table-wrap"><table><thead><tr><th>التاريخ</th><th>اسم التدريب</th><th>الجهة</th><th>الأيام</th><th>الحضور</th></tr></thead><tbody>{trainingRecords.filter((training:any)=>trainingAttendees.some((row:any)=>Number(row.training_id)===Number(training.id)&&Number(row.staff_id)===Number(selectedStaff.id))).map((training:any)=>{const row=trainingAttendees.find((item:any)=>Number(item.training_id)===Number(training.id)&&Number(item.staff_id)===Number(selectedStaff.id));return <tr key={training.id}><td>{training.training_date||"—"}</td><td>{training.training_name||"—"}</td><td>{training.training_agency||"—"}</td><td>{training.training_days||0} يوم</td><td>{row?.attended===false?"غائب":"حاضر"}</td></tr>})}{!trainingRecords.some((training:any)=>trainingAttendees.some((row:any)=>Number(row.training_id)===Number(training.id)&&Number(row.staff_id)===Number(selectedStaff.id)))&&<tr><td colSpan={5}>لا توجد تدريبات مسجلة</td></tr>}</tbody></table></div></section>
               <div className="modal-actions"><button type="button" className="ghost" onClick={()=>setSelectedStaff(null)}>إغلاق</button><button type="button" className="primary" onClick={()=>beginStaffEdit(selectedStaff)}><Pencil/> تعديل بيانات الموظف</button></div>
             </section>
           </div>}
