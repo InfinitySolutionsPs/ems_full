@@ -2927,3 +2927,15 @@ tbody tr:hover {
   .backup-details { flex-direction:column; }
   .backup-actions { width:100%; }
 }
+
+/* Training filters */
+.training-filters{padding:22px 24px 24px;overflow:hidden}
+.training-filters>.panel-title{margin-bottom:18px}
+.training-filter-grid{display:grid;grid-template-columns:minmax(220px,1.6fr) repeat(4,minmax(150px,1fr)) auto;gap:14px;align-items:end}
+.training-filter-grid label{display:flex;flex-direction:column;gap:7px;min-width:0;color:#4b5563;font-size:12px;font-weight:800;white-space:nowrap}
+.training-filter-grid input,.training-filter-grid select{width:100%;height:44px;min-width:0;border:1px solid #dce1e8;border-radius:11px;background:#fff;padding:0 12px;color:#202733;font:inherit;font-size:12px;outline:0;box-sizing:border-box}
+.training-filter-grid input:focus,.training-filter-grid select:focus{border-color:#c41734;box-shadow:0 0 0 3px #fff0f2}
+.training-filter-grid button{height:44px;white-space:nowrap;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 16px}
+.training-filter-grid button svg{width:17px;height:17px}
+@media(max-width:1200px){.training-filter-grid{grid-template-columns:repeat(3,minmax(160px,1fr))}.training-filter-grid label:first-child{grid-column:span 2}}
+@media(max-width:700px){.training-filters{padding:18px 16px}.training-filter-grid{grid-template-columns:1fr}.training-filter-grid label:first-child{grid-column:auto}.training-filter-grid button{width:100%}}
