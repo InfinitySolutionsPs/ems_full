@@ -972,7 +972,7 @@ function DashboardView({
           </article>
         ))}
       </section>
-      <section className="panel home-training-summary"><PanelTitle icon={GraduationCap} title="ملخص التدريب" subtitle="إحصائيات التدريبات المسجلة في النظام" /><div className="home-training-cards"><article><GraduationCap/><b>{trainingSummary.total}</b><span>إجمالي التدريبات</span></article><article><UsersRound/><b>{trainingSummary.staff}</b><span>تدريبات طاقم العمل</span></article><article><UsersRound/><b>{trainingSummary.community}</b><span>تدريبات المجتمع المحلي</span></article><article><ClipboardCheck/><b>{trainingSummary.attendees}</b><span>إجمالي المشاركين</span></article><article><CheckCircle2/><b>{trainingSummary.attendees ? Math.round((trainingSummary.present/trainingSummary.attendees)*100)+"%" : "—"}</b><span>نسبة الحضور</span></article></div></section>
+      <section className="panel home-training-count"><div className="home-training-count-icon"><GraduationCap/></div><div><span>إجمالي التدريبات المسجلة</span><strong>{trainingSummary.total}</strong></div><small>تدريبات طاقم العمل والمجتمع المحلي</small></section>
       <section className="achievement-ribbon">
         <div><b>{s.total||0}</b><span>بلاغًا معتمدًا</span></div>
         <div><b>{s.beneficiaries||0}</b><span>مستفيدًا</span></div>
