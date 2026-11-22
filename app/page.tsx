@@ -1450,10 +1450,18 @@ function IncidentForm({
               <label>درجة الأولوية <em>*</em><select required value={person.urgency||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,urgency:e.target.value}:x))}><option value="">اختر...</option>{["Red","Yellow","Green","Black","N/A"].map(x=><option key={x} value={x}>{urgencyArabic[x]}</option>)}</select></label>
               <label>الشكوى الرئيسية<select value={person.chiefComplaint||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,chiefComplaint:e.target.value}:x))}><option value="">اختر...</option>{complaintOptions.map(x=><option key={x}>{x}</option>)}<option value="__other">أخرى</option></select></label>
               {person.chiefComplaint==="__other"&&<label>اكتب الشكوى<input value={person.chiefComplaintOther||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,chiefComplaintOther:e.target.value}:x))}/></label>}
+              <label className="check-card beneficiary-different-address"><input type="checkbox" checked={person.differentAddress==="1"} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,differentAddress:e.target.checked?"1":""}:x))}/><span>عنوان مختلف لمكان استلام الحالة</span></label>
+              {person.differentAddress==="1"&&<>
+                <label>المحافظة <em>*</em><select required value={person.pickupGovernorate||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,pickupGovernorate:e.target.value}:x))}><option value="">اختر...</option>{governors.map((x:string)=><option key={x} value={x}>{x}</option>)}</select></label>
+                <label>البلدية<input value={person.pickupMunicipality||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,pickupMunicipality:e.target.value}:x))}/></label>
+                <label>الحي<input value={person.pickupNeighborhood||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,pickupNeighborhood:e.target.value}:x))}/></label>
+                <label>مكان استلام الحالة<select value={person.pickupType||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,pickupType:e.target.value}:x))}><option value="">اختر...</option><option value="House">منزل</option><option value="Shelter/tent">مأوى / خيمة</option><option value="Street">شارع</option><option value="Field">ميدان</option><option value="Clinic (Public)">عيادة</option><option value="Hospital">مستشفى</option></select></label>
+                <label>وصف مكان الاستلام<input value={person.pickupLocation||""} onChange={e=>setAdditional(additionalBeneficiaries.map((x:any,i:number)=>i===index?{...x,pickupLocation:e.target.value}:x))}/></label>
+              </>}
             </div>
           </div>)}
         </div>
-        <button type="button" className="ghost add-beneficiary" onClick={()=>setAdditional([...additionalBeneficiaries,{localId:crypto.randomUUID(),beneficiaryName:"",gender:"",age:"",contact:"",companionCount:"",category:"",caseType:"",urgency:"",chiefComplaint:"",chiefComplaintOther:""}])}><PlusCircle/> إضافة مستفيد آخر</button>
+        <button type="button" className="ghost add-beneficiary" onClick={()=>setAdditional([...additionalBeneficiaries,{localId:crypto.randomUUID(),beneficiaryName:"",gender:"",age:"",contact:"",companionCount:"",category:"",caseType:"",urgency:"",chiefComplaint:"",chiefComplaintOther:"",differentAddress:"",pickupGovernorate:"",pickupMunicipality:"",pickupNeighborhood:"",pickupType:"",pickupLocation:""}])}><PlusCircle/> إضافة مستفيد آخر</button>
       </FormSection>
 
       {!isCancelled && <FormSection icon={Activity} title="التدخلات والملاحظات">
