@@ -2939,3 +2939,12 @@ tbody tr:hover {
 .training-filter-grid button svg{width:17px;height:17px}
 @media(max-width:1200px){.training-filter-grid{grid-template-columns:repeat(3,minmax(160px,1fr))}.training-filter-grid label:first-child{grid-column:span 2}}
 @media(max-width:700px){.training-filters{padding:18px 16px}.training-filter-grid{grid-template-columns:1fr}.training-filter-grid label:first-child{grid-column:auto}.training-filter-grid button{width:100%}}
+
+/* KPI sizing and training summaries */
+.vehicle-profile-summary article{min-width:0;overflow:hidden}
+.vehicle-profile-summary b{display:block;min-width:0;max-width:100%;font-size:clamp(16px,2vw,22px);line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;direction:ltr;text-align:right}
+.training-metrics{grid-template-columns:repeat(5,minmax(0,1fr));margin:0 0 2px}
+.training-metrics article{min-width:0;overflow:hidden}
+.training-metrics b{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.2}
+@media(max-width:1100px){.training-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:700px){.training-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
