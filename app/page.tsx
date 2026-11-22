@@ -1282,11 +1282,15 @@ function IncidentForm({
               "Hospital (Public)",
               "Hospital (Private)",
               "Hospital (Field)",
+              "House",
+              "Checkpoint",
               "No transport (no need)",
             ], false, {
               "Hospital (Public)": "مستشفى حكومي",
               "Hospital (Private)": "مستشفى خاص",
               "Hospital (Field)": "مستشفى ميداني",
+              "House": "بيت",
+              "Checkpoint": "معبر",
               "No transport (no need)": "لا يحتاج إلى نقل",
             })}
           {requiresDelivery &&
