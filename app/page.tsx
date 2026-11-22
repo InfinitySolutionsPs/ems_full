@@ -503,6 +503,7 @@ export default function HomePage() {
     { id: "records", label: "سجل البلاغات", icon: ClipboardList, permission:"incidents.view" },
     { id: "coordination", label: "التنسيقات", icon: Route, permission:"coordination.view" },
     { id: "training", label: "التدريب", icon: GraduationCap, permission:"training.view" },
+    { id: "capacity", label: "القدرة التشغيلية", icon: Gauge, permission:"capacity.view" },
     { id: "fleet", label: "المركبات والوقود", icon: Ambulance, permission:"fleet.view" },
     { id: "maintenance", label: "صيانة المركبات", icon: Wrench, permission:"maintenance.view" },
     { id: "approvals", label: "اعتماد الإحصائيات", icon: ClipboardCheck, permission:"approvals.manage" },
