@@ -827,6 +827,8 @@ function DashboardView({
   refresh: () => void;
   onGovernorate: (n: string) => void;
 }) {
+  const [trainingSummary, setTrainingSummary] = useState<any>({ total: 0, staff: 0, community: 0, attendees: 0, present: 0 });
+  useEffect(() => { fetch("/api/trainings", { cache: "no-store" }).then(r => r.ok ? r.json() : null).then(v => { const rows=v?.trainings||[]; setTrainingSummary({ total:rows.length, staff:rows.filter((x:any)=>x.training_type==="staff").length, community:rows.filter((x:any)=>x.training_type==="community").length, attendees:rows.reduce((s:number,x:any)=>s+Number(x.attendees_count||x.trainee_count||0),0), present:rows.reduce((s:number,x:any)=>s+Number(x.present_count||0),0) }); }).catch(() => {}); }, []);
   const s = dashboard.summary || {};
   const total = Number(s.total || 0);
   const workingVehicles = Number(s.workingVehicles || 0);
@@ -970,6 +972,7 @@ function DashboardView({
           </article>
         ))}
       </section>
+      <section className="panel home-training-summary"><PanelTitle icon={GraduationCap} title="ملخص التدريب" subtitle="إحصائيات التدريبات المسجلة في النظام" /><div className="home-training-cards"><article><GraduationCap/><b>{trainingSummary.total}</b><span>إجمالي التدريبات</span></article><article><UsersRound/><b>{trainingSummary.staff}</b><span>تدريبات طاقم العمل</span></article><article><UsersRound/><b>{trainingSummary.community}</b><span>تدريبات المجتمع المحلي</span></article><article><ClipboardCheck/><b>{trainingSummary.attendees}</b><span>إجمالي المشاركين</span></article><article><CheckCircle2/><b>{trainingSummary.attendees ? Math.round((trainingSummary.present/trainingSummary.attendees)*100)+"%" : "—"}</b><span>نسبة الحضور</span></article></div></section>
       <section className="achievement-ribbon">
         <div><b>{s.total||0}</b><span>بلاغًا معتمدًا</span></div>
         <div><b>{s.beneficiaries||0}</b><span>مستفيدًا</span></div>
