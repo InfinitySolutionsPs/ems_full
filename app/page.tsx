@@ -2038,9 +2038,6 @@ function AuditLogView() {
 function BackupsView() {
   const [status, setStatus] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [trainingFilters, setTrainingFilters] = useState({ search: "", type: "all", agency: "all", from: "", to: "" });
-  const [trainingPage, setTrainingPage] = useState(1);
-  const [trainingPageSize, setTrainingPageSize] = useState(10);
   const [running, setRunning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [email, setEmail] = useState("");
@@ -3168,6 +3165,9 @@ function CoordinationView() {
 }
 
 function TrainingView({ staff }: { staff: any[] }) {
+  const [trainingFilters, setTrainingFilters] = useState({ search: "", type: "all", agency: "all", from: "", to: "" });
+  const [trainingPage, setTrainingPage] = useState(1);
+  const [trainingPageSize, setTrainingPageSize] = useState(10);
   const empty = { trainingType: "community", trainingName: "", trainingDate: today, trainingAgency: "", funder: "", trainerName: "", traineeCount: "", location: "", trainingDays: "", trainingHours: "" };
   const [draft, setDraft] = useState<any>(empty);
   const [selected, setSelected] = useState<Record<string, boolean>>({});
