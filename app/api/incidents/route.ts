@@ -200,7 +200,7 @@ export async function POST(request: NextRequest) {
   if (requiresMovement) required.push("vehicle");
   if (requiresMovement) required.push("kmEnd");
   if (incidentStatus === "cancelled_after_dispatch")
-    required.push("dispatchTime", "returnTime", "returnLocation");
+    required.push("dispatchTime", "returnTime", "returnLocation", "noTransportReason");
   if (
     requiresDelivery &&
     String(body.dropoffType || "").startsWith("Hospital")
@@ -220,6 +220,7 @@ export async function POST(request: NextRequest) {
       dispatchTime: "وقت التحرك",
       returnTime: "وقت العودة",
       returnLocation: "مكان الرجوع",
+      noTransportReason: "سبب عدم النقل",
       dropoffLocation: "المستشفى المستلم",
     };
     const missingLabels = missing.map((key) => labels[key] || key);
@@ -266,7 +267,7 @@ export async function POST(request: NextRequest) {
         ["call_date",body.callDate||new Date().toISOString().slice(0,10)],["call_time",body.callTime||""],["entry_time",body.entryTime||""],["dispatch_date",requiresMovement&&body.dispatchTime?body.callDate:null],["dispatch_time",requiresMovement?body.dispatchTime:null],["on_scene_date",requiresMovement&&body.arrivalTime?body.callDate:null],["arrival_time",requiresMovement?body.arrivalTime:null],
         ["hospital_date",requiresDelivery&&body.hospitalTime?body.callDate:null],["hospital_time",requiresDelivery?body.hospitalTime:null],["available_date",requiresMovement&&body.clearTime?body.callDate:null],["clear_time",requiresMovement?body.clearTime:null],["return_time",requiresMovement?body.returnTime:null],["return_location",incidentStatus==="cancelled_after_dispatch"?body.returnLocation:null],["response_minutes",responseMinutes],["service_minutes",serviceMinutes],
         ["dispatcher_primary",body.dispatcherPrimary],["dispatcher_secondary",body.dispatcherSecondary],["emt_driver",body.emtDriver],["emt_lead",body.emtLead],["emt_assist",body.emtAssist],
-        ["crew",body.crew],["interventions",requiresDelivery?(beneficiary.interventions||body.interventions):null],["chief_complaint",requiresDelivery?complaint:null],["fuel_liters",index===0?Number(body.fuelLiters||0):0],["notes",body.notes],
+        ["crew",body.crew],["interventions",requiresDelivery?(beneficiary.interventions||body.interventions):null],["chief_complaint",requiresDelivery?complaint:null],["fuel_liters",index===0?Number(body.fuelLiters||0):0],["notes",incidentStatus==="cancelled_after_dispatch" ? (body.noTransportReason || body.notes) : body.notes],
         ["emergency_event_type",body.emergencyEventType||null],["emergency_event_notes",body.emergencyEventNotes||null],["cancelled",["cancelled_before_dispatch","cancelled_after_dispatch"].includes(incidentStatus)?1:0],
         ...["patientDeceased","conflictRelated","oxygen","bvm","airway","cpr","aed","drugs","woundCare","tourniquet","immobilization","cervicalCollar","glucoseCheck","splinting","delivery"].map((k)=>[k.replace(/[A-Z]/g,m=>`_${m.toLowerCase()}`), (k==="patientDeceased"&&beneficiary.category==="Martyr")||(k==="delivery"&&beneficiary.category==="Delivery")||beneficiary[k]||body[k]?1:0] as [string,unknown]),
         ["approval_status",isDraft?"draft":"approved"],["approved_by",isDraft?null:actor],["approved_at",isDraft?null:new Date().toISOString()],["data_quality_status","ok"],["created_by",actor],["created_by_user_id",access.profile?.id||null],
@@ -357,10 +358,10 @@ export async function PATCH(request: NextRequest) {
     if (incidentStatus === "completed") required.push("pickupGovernorate");
     if (requiresMovement) required.push("vehicle");
     if (requiresMovement) required.push("kmEnd");
-    if (incidentStatus === "cancelled_after_dispatch") required.push("dispatchTime","returnTime","returnLocation");
+    if (incidentStatus === "cancelled_after_dispatch") required.push("dispatchTime","returnTime","returnLocation","noTransportReason");
     if (requiresDelivery && String(body.dropoffType||"").startsWith("Hospital")) required.push("dropoffLocation");
     const missing = required.filter((key)=>!clean(body[key]));
-    if (missing.length) { const labels:Record<string,string>={center:"اسم المركز",station:"اسم المحطة",shift:"الوردية",callDate:"تاريخ استلام البلاغ",callTime:"وقت استلام البلاغ",vehicle:"المركبة",kmEnd:"عداد النهاية",pickupGovernorate:"محافظة استلام الحالة",dispatchTime:"وقت التحرك",returnTime:"وقت العودة",returnLocation:"مكان الرجوع",dropoffLocation:"المستشفى المستلم"}; return NextResponse.json({error:`لا يمكن اعتماد البلاغ قبل استكمال: ${missing.map((key)=>labels[key]||key).join("، ")}`,fields:missing},{status:400}); }
+    if (missing.length) { const labels:Record<string,string>={center:"اسم المركز",station:"اسم المحطة",shift:"الوردية",callDate:"تاريخ استلام البلاغ",callTime:"وقت استلام البلاغ",vehicle:"المركبة",kmEnd:"عداد النهاية",pickupGovernorate:"محافظة استلام الحالة",dispatchTime:"وقت التحرك",returnTime:"وقت العودة",returnLocation:"مكان الرجوع",noTransportReason:"سبب عدم النقل",dropoffLocation:"المستشفى المستلم"}; return NextResponse.json({error:`لا يمكن اعتماد البلاغ قبل استكمال: ${missing.map((key)=>labels[key]||key).join("، ")}`,fields:missing},{status:400}); }
     const invalidBeneficiary = additionalBeneficiaries.find((row) => !clean(row.gender) || !clean(row.urgency) || !clean(row.category) || !clean(row.caseType));
     if (invalidBeneficiary) return NextResponse.json({ error: "يرجى استكمال الحقول الإلزامية لكل مستفيد إضافي" }, { status: 400 });
     if (invalidTimeField(body)) return NextResponse.json({error:"يرجى إدخال الوقت بنظام 24 ساعة بصيغة HH:mm"},{status:400});
