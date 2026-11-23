@@ -352,7 +352,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ error: "بيانات المستفيدين الإضافيين غير صالحة" }, { status: 400 });
   }
   if (submissionAction === "approve") {
-    const required = ["shift","station","callDate","callTime"];
+    const required = ["center","station","shift","callDate","callTime"];
     if (requiresBeneficiary) required.push("gender","urgency","category","caseType");
     if (incidentStatus === "completed") required.push("pickupGovernorate");
     if (requiresMovement) required.push("vehicle");
@@ -360,7 +360,7 @@ export async function PATCH(request: NextRequest) {
     if (incidentStatus === "cancelled_after_dispatch") required.push("dispatchTime","returnTime","returnLocation");
     if (requiresDelivery && String(body.dropoffType||"").startsWith("Hospital")) required.push("dropoffLocation");
     const missing = required.filter((key)=>!clean(body[key]));
-    if (missing.length) return NextResponse.json({error:"يرجى استكمال الحقول الإلزامية قبل اعتماد البلاغ",fields:missing},{status:400});
+    if (missing.length) { const labels:Record<string,string>={center:"اسم المركز",station:"اسم المحطة",shift:"الوردية",callDate:"تاريخ استلام البلاغ",callTime:"وقت استلام البلاغ",vehicle:"المركبة",kmEnd:"عداد النهاية",pickupGovernorate:"محافظة استلام الحالة",dispatchTime:"وقت التحرك",returnTime:"وقت العودة",returnLocation:"مكان الرجوع",dropoffLocation:"المستشفى المستلم"}; return NextResponse.json({error:`لا يمكن اعتماد البلاغ قبل استكمال: ${missing.map((key)=>labels[key]||key).join("، ")}`,fields:missing},{status:400}); }
     const invalidBeneficiary = additionalBeneficiaries.find((row) => !clean(row.gender) || !clean(row.urgency) || !clean(row.category) || !clean(row.caseType));
     if (invalidBeneficiary) return NextResponse.json({ error: "يرجى استكمال الحقول الإلزامية لكل مستفيد إضافي" }, { status: 400 });
     if (invalidTimeField(body)) return NextResponse.json({error:"يرجى إدخال الوقت بنظام 24 ساعة بصيغة HH:mm"},{status:400});
