@@ -463,6 +463,8 @@ export default function HomePage() {
     }
     refresh();
     loadAux();
+    // Refresh vehicle lists, odometer cards, movement and fuel views immediately.
+    window.dispatchEvent(new Event("ems:fleet-refresh"));
   };
   const exportCsv = () => {
     const columns = [
