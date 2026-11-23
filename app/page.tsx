@@ -1702,6 +1702,7 @@ function Records({
       clearTime: x.clear_time || "",
       returnTime: x.return_time || "",
       returnLocation: x.return_location || "",
+      noTransportReason: x.incident_status === "cancelled_after_dispatch" ? (x.notes || "") : "",
       kmStart: x.km_start || "",
       kmEnd: x.km_end || "",
       dispatcherPrimary: x.dispatcher_primary || "",
