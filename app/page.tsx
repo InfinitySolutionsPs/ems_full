@@ -230,6 +230,7 @@ const emptyForm: Record<string, string> = {
   clearTime: "",
   returnTime: "",
   returnLocation: "",
+  noTransportReason: "",
   crew: "",
   dispatcherPrimary: "",
   dispatcherSecondary: "",
@@ -1531,6 +1532,17 @@ function IncidentForm({
               placeholder="اكتب سبب الإلغاء وأي تفاصيل مهمة"
             />
           </label>
+          {incidentStatus === "cancelled_after_dispatch" && (
+            <label className="cancelled-notes">
+              سبب عدم النقل <em>*</em>
+              <textarea
+                required
+                value={form.noTransportReason}
+                onChange={(e) => setField("noTransportReason", e.target.value)}
+                placeholder="اكتب سبب عدم نقل الحالة بعد تحرك المركبة"
+              />
+            </label>
+          )}
         </FormSection>
       )}
 
